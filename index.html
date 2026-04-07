@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InnoLink</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Contrast fix for legacy dark blocks still in page */
+    .bg-slate-950,
+    .bg-slate-900,
+    .bg-slate-900\/95,
+    .bg-slate-900\/90,
+    .bg-slate-900\/75,
+    .bg-slate-900\/70,
+    .bg-slate-950\/60 {
+      background-color: #ffffff !important;
+    }
+    .text-slate-100,
+    .text-slate-200,
+    .text-slate-300,
+    .text-slate-400,
+    .text-white {
+      color: #0f172a !important;
+    }
+    .border-slate-700,
+    .border-slate-800 {
+      border-color: #d1d5db !important;
+    }
+    .bg-slate-800 {
+      background-color: #f8fafc !important;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white">
+    <div class="mx-auto flex h-14 w-[94%] max-w-7xl items-center justify-between">
+      <h1 class="font-semibold">InnoLink</h1>
+      <nav class="flex items-center gap-2 text-sm">
+        <button class="tab rounded px-2 py-1 bg-blue-600 text-white" data-page="home">首页</button>
+        <button class="tab rounded px-2 py-1 border" data-page="hall">大厅</button>
+        <button class="tab rounded px-2 py-1 border" data-page="publish">发布</button>
+        <button class="tab rounded px-2 py-1 border" data-page="chat">沟通</button>
+      </nav>
+      <div class="flex items-center gap-2">
+        <span id="who" class="text-xs text-slate-500"></span>
+        <button id="authOpen" class="rounded border px-2 py-1 text-sm">登录/注册</button>
+        <button id="logout" class="hidden rounded bg-slate-900 px-2 py-1 text-sm text-white">退出</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-[94%] max-w-7xl py-6">
+    <section id="home" class="page">
+      <div class="rounded-xl border bg-white p-4">
+        <h2 class="text-2xl font-bold">创新成果撮合平台</h2>
+        <p class="mt-2 text-slate-600">支持注册登录、发布内容与专门沟通页面。</p>
+      </div>
+      <div class="mt-4 rounded-xl border bg-white p-4">
+        <h3 class="mb-3 font-semibold">最新内容</h3>
+        <div id="homeList" class="grid gap-3 md:grid-cols-2"></div>
+      </div>
+    </section>
+
+    <section id="publish" class="page hidden">
+      <div class="grid gap-4 lg:grid-cols-3">
+        <div class="rounded-xl border bg-white p-4">
+          <h3 id="formTitle" class="font-semibold">发布内容</h3>
+          <form id="postForm" class="mt-3 space-y-2">
+            <input id="title" class="w-full rounded border px-2 py-2 text-sm" placeholder="标题" />
+            <select id="category" class="w-full rounded border px-2 py-2 text-sm">
+              <option value="">选择分类</option>
+              <option>硬科技</option>
+              <option>生物医药</option>
+              <option>AI应用</option>
+            </select>
+            <textarea id="desc" class="w-full rounded border px-2 py-2 text-sm" rows="4" placeholder="简介"></textarea>
+            <div class="flex gap-2">
+              <button class="flex-1 rounded bg-blue-600 px-3 py-2 text-sm text-white">保存</button>
+              <button id="cancelEdit" type="button" class="hidden rounded border px-3 py-2 text-sm">取消</button>
+            </div>
+          </form>
+        </div>
+        <div class="rounded-xl border bg-white p-4 lg:col-span-2">
+          <h3 class="mb-3 font-semibold">我的发布</h3>
+          <div id="mineList" class="space-y-2"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="hall" class="page hidden">
+      <div class="rounded-xl border bg-white p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-lg font-semibold">创新帖子展示大厅</h3>
+            <p class="text-sm text-slate-500">信息流式帖子展示，支持分类筛选和关键词搜索。</p>
+          </div>
+          <button class="tab rounded bg-blue-600 px-3 py-1.5 text-sm text-white" data-page="publish">去发布</button>
+        </div>
+        <div class="mt-4 grid gap-2 md:grid-cols-3">
+          <select id="hallCategory" class="rounded border px-2 py-2 text-sm">
+            <option value="全部">全部分类</option>
+            <option>硬科技</option>
+            <option>生物医药</option>
+            <option>AI应用</option>
+          </select>
+          <input id="hallKeyword" class="rounded border px-2 py-2 text-sm md:col-span-2" placeholder="搜索标题、简介、发布者" />
+        </div>
+      </div>
+      <div id="hallList" class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3"></div>
+    </section>
+
+    <section id="chat" class="page hidden">
+      <div class="grid gap-4 lg:grid-cols-12">
+        <aside class="rounded-xl border bg-white p-3 lg:col-span-4">
+          <input id="chatSearch" class="mb-2 w-full rounded border px-2 py-2 text-sm" placeholder="搜索会话" />
+          <div id="chatList" class="space-y-2"></div>
+        </aside>
+        <section class="rounded-xl border bg-white lg:col-span-8">
+          <div id="empty" class="flex h-[420px] items-center justify-center text-slate-400">请选择会话</div>
+          <div id="panel" class="hidden">
+            <div class="border-b px-3 py-2">
+              <h4 id="chatName" class="text-sm font-semibold"></h4>
+              <p id="chatMeta" class="text-xs text-slate-500"></p>
+            </div>
+            <div id="msgs" class="h-[320px] space-y-2 overflow-y-auto bg-slate-50 p-3"></div>
+            <div class="border-t p-3">
+              <div class="mb-2 flex items-center gap-2">
+                <label class="rounded border px-2 py-1 text-xs">+附件<input id="file" type="file" class="hidden" /></label>
+                <span id="fileName" class="text-xs text-slate-500"></span>
+              </div>
+              <div class="flex gap-2">
+                <input id="msgInput" class="w-full rounded border px-2 py-2 text-sm" placeholder="输入消息，回车发送" />
+                <button id="send" class="rounded bg-blue-600 px-3 py-2 text-sm text-white">发送</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="authModal" class="fixed inset-0 hidden items-center justify-center bg-slate-900/40 p-4">
+    <div class="w-full max-w-sm rounded-xl border bg-white p-4">
+      <div class="mb-2 flex items-center justify-between">
+        <h3 id="authTitle" class="font-semibold">登录</h3>
+        <button id="authClose" class="rounded border px-2 py-1 text-xs">关闭</button>
+      </div>
+      <form id="authForm" class="space-y-2">
+        <input id="u" class="w-full rounded border px-2 py-2 text-sm" placeholder="用户名" />
+        <input id="p" type="password" class="w-full rounded border px-2 py-2 text-sm" placeholder="密码" />
+        <button class="w-full rounded bg-blue-600 px-3 py-2 text-sm text-white">确认</button>
+      </form>
+      <button id="switchAuth" class="mt-2 text-sm text-blue-600">还没有账号？去注册</button>
+    </div>
+  </div>
+
+  <script>
+    var KEY = "innolink_v3";
+    var db = JSON.parse(localStorage.getItem(KEY) || "{}");
+    if (!db.users) db = { users: [], current: null, editId: "", posts: [{ id: "p1", author: "平台示例", title: "AI 农业传感器", category: "AI应用", desc: "寻找合作企业", ts: Date.now() }], chats: [{ id: "c1", name: "平台顾问", project: "平台咨询", online: true, unread: 1, messages: [{ side: "left", text: "欢迎使用 InnoLink", read: false, ts: Date.now() }] }] };
+    var authMode = "login", activeChatId = "", pendingFile = "";
+    var api = { save: function() { localStorage.setItem(KEY, JSON.stringify(db)); return Promise.resolve(); } };
+
+    function fmt(t){return new Date(t).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"});}
+    function id(p){return p+"_"+Math.random().toString(36).slice(2,8);}
+    function mustLogin(){ if(!db.current){ alert("请先登录"); openAuth("login"); return false; } return true; }
+    function setPage(page){ document.querySelectorAll(".page").forEach(function(x){x.classList.add("hidden");}); document.getElementById(page).classList.remove("hidden"); document.querySelectorAll(".tab").forEach(function(t){t.classList.remove("bg-blue-600","text-white");t.classList.add("border"); if(t.dataset.page===page){t.classList.add("bg-blue-600","text-white");t.classList.remove("border");}}); }
+    function authState(){ document.getElementById("who").textContent = db.current ? ("当前: "+db.current) : ""; document.getElementById("logout").classList.toggle("hidden", !db.current); }
+
+    function postHtml(p,mine){
+      var actions = mine ? '<div class="mt-2 flex gap-1"><button class="edit border rounded px-2 py-1 text-xs" data-id="'+p.id+'">编辑</button><button class="del border rounded px-2 py-1 text-xs text-rose-700 border-rose-200 bg-rose-50" data-id="'+p.id+'">删除</button><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">沟通</button></div>' : '<button class="tochat mt-2 border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">沟通</button>';
+      return '<div class="rounded border p-3"><div class="flex justify-between text-xs"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span><span class="text-slate-500">'+new Date(p.ts).toLocaleString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="text-sm text-slate-600">'+p.desc+'</p><p class="mt-1 text-xs text-slate-500">发布者: '+p.author+'</p>'+actions+'</div>';
+    }
+
+    function renderPosts(){
+      var posts = db.posts.slice().sort(function(a,b){return b.ts-a.ts;});
+      document.getElementById("homeList").innerHTML = posts.map(function(p){return postHtml(p,false);}).join("") || '<p class="text-sm text-slate-500">暂无</p>';
+      var mine = db.current ? posts.filter(function(p){return p.author===db.current;}) : [];
+      document.getElementById("mineList").innerHTML = mine.map(function(p){return postHtml(p,true);}).join("") || '<p class="text-sm text-slate-500">暂无</p>';
+      document.querySelectorAll(".tochat").forEach(function(b){ b.addEventListener("click", function(){ if(!mustLogin()) return; openOrCreateChat(b.dataset.name,b.dataset.project); setPage("chat"); });});
+      document.querySelectorAll(".edit").forEach(function(b){ b.addEventListener("click", function(){ var p=db.posts.find(function(x){return x.id===b.dataset.id;}); if(!p) return; db.editId=p.id; document.getElementById("formTitle").textContent="编辑内容"; document.getElementById("title").value=p.title; document.getElementById("category").value=p.category; document.getElementById("desc").value=p.desc; document.getElementById("cancelEdit").classList.remove("hidden"); });});
+      document.querySelectorAll(".del").forEach(function(b){ b.addEventListener("click", function(){ if(!confirm("确认删除?")) return; db.posts = db.posts.filter(function(x){return x.id!==b.dataset.id;}); api.save().then(renderPosts); });});
+      renderHall();
+    }
+
+    function resetForm(){ db.editId=""; document.getElementById("formTitle").textContent="发布内容"; document.getElementById("title").value=""; document.getElementById("category").value=""; document.getElementById("desc").value=""; document.getElementById("cancelEdit").classList.add("hidden"); }
+
+    function hallCard(p){
+      return '<article class="rounded-xl border bg-white p-3"><div class="flex items-center justify-between text-xs"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span><span class="text-slate-500">'+new Date(p.ts).toLocaleDateString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="mt-1 line-clamp-2 text-sm text-slate-600">'+p.desc+'</p><div class="mt-2 flex items-center justify-between"><span class="text-xs text-slate-500">'+p.author+'</span><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">立即沟通</button></div></article>';
+    }
+
+    function renderHall(){
+      var all = db.posts.slice().sort(function(a,b){return b.ts-a.ts;});
+      var c = document.getElementById("hallCategory").value || "全部";
+      var q = (document.getElementById("hallKeyword").value || "").trim().toLowerCase();
+      var list = all.filter(function(p){
+        var okCategory = c === "全部" || p.category === c;
+        var text = (p.title + " " + p.desc + " " + p.author).toLowerCase();
+        var okKeyword = !q || text.indexOf(q) > -1;
+        return okCategory && okKeyword;
+      });
+      document.getElementById("hallList").innerHTML = list.map(hallCard).join("") || '<p class="text-sm text-slate-500">暂无匹配帖子</p>';
+      document.querySelectorAll("#hallList .tochat").forEach(function(b){
+        b.addEventListener("click", function(){
+          if(!mustLogin()) return;
+          openOrCreateChat(b.dataset.name, b.dataset.project);
+          setPage("chat");
+        });
+      });
+    }
+
+    function row(c){ return '<button class="crow w-full rounded border p-2 text-left" data-id="'+c.id+'"><div class="flex justify-between text-xs"><span>'+(c.online?'🟢':'⚪')+' '+c.project+'</span>'+(c.unread?'<span class="rounded bg-blue-600 px-2 text-white">未读 '+c.unread+'</span>':'<span class="text-slate-400">已读</span>')+'</div><p class="mt-1 text-sm font-semibold">'+c.name+'</p></button>'; }
+    function renderChats(){
+      var q = document.getElementById("chatSearch").value.trim().toLowerCase();
+      var list = db.chats.filter(function(c){ return !q || c.name.toLowerCase().includes(q) || c.project.toLowerCase().includes(q); });
+      document.getElementById("chatList").innerHTML = list.map(row).join("") || '<p class="text-sm text-slate-500">无匹配</p>';
+      document.querySelectorAll(".crow").forEach(function(b){ b.addEventListener("click", function(){ activeChatId=b.dataset.id; var c=db.chats.find(function(x){return x.id===activeChatId;}); if(c) c.unread=0; api.save().then(function(){renderChats();renderActive();}); });});
+    }
+    function renderActive(){
+      var c = db.chats.find(function(x){return x.id===activeChatId;});
+      document.getElementById("empty").classList.toggle("hidden", !!c);
+      document.getElementById("panel").classList.toggle("hidden", !c);
+      if(!c) return;
+      document.getElementById("chatName").textContent=c.name;
+      document.getElementById("chatMeta").textContent="项目: "+c.project+" · "+(c.online?"在线":"离线");
+      document.getElementById("msgs").innerHTML = c.messages.map(function(m){ return '<div class="flex '+(m.side==="right"?"justify-end":"justify-start")+'"><div class="max-w-[78%]"><div class="rounded-2xl px-3 py-2 text-sm '+(m.side==="right"?"bg-blue-600 text-white":"bg-white border")+'">'+m.text+'</div><p class="mt-1 text-right text-[10px] text-slate-400">'+fmt(m.ts)+' '+(m.side==="right"?(m.read?"已读":"未读"):"")+'</p></div></div>'; }).join("");
+      var box=document.getElementById("msgs"); box.scrollTop=box.scrollHeight;
+    }
+    function openOrCreateChat(name,project){
+      var c=db.chats.find(function(x){return x.name===name&&x.project===project;});
+      if(!c){ c={id:id("c"),name:name,project:project,online:Math.random()>0.35,unread:0,messages:[{side:"left",text:"您好，已收到沟通申请。",read:true,ts:Date.now()}]}; db.chats.push(c); api.save(); }
+      activeChatId=c.id; renderChats(); renderActive();
+    }
+    function send(){
+      if(!mustLogin() || !activeChatId) return;
+      var c=db.chats.find(function(x){return x.id===activeChatId;}); if(!c) return;
+      var t=document.getElementById("msgInput").value.trim(); if(!t && !pendingFile) return;
+      if(t) c.messages.push({side:"right",text:t,read:false,ts:Date.now()});
+      if(pendingFile) c.messages.push({side:"right",text:"[附件] "+pendingFile,read:false,ts:Date.now()});
+      c.messages.push({side:"left",text:"收到，稍后回复。",read:true,ts:Date.now()});
+      document.getElementById("msgInput").value=""; document.getElementById("file").value=""; document.getElementById("fileName").textContent=""; pendingFile="";
+      api.save().then(function(){renderChats();renderActive();});
+    }
+
+    function openAuth(mode){ authMode=mode; document.getElementById("authTitle").textContent=mode==="login"?"登录":"注册"; document.getElementById("switchAuth").textContent=mode==="login"?"还没有账号？去注册":"已有账号？去登录"; document.getElementById("u").value=""; document.getElementById("p").value=""; var m=document.getElementById("authModal"); m.classList.remove("hidden"); m.classList.add("flex"); }
+    function closeAuth(){ var m=document.getElementById("authModal"); m.classList.add("hidden"); m.classList.remove("flex"); }
+
+    document.querySelectorAll(".tab").forEach(function(b){ b.addEventListener("click",function(){setPage(b.dataset.page);});});
+    document.getElementById("authOpen").addEventListener("click",function(){openAuth("login");});
+    document.getElementById("authClose").addEventListener("click",closeAuth);
+    document.getElementById("switchAuth").addEventListener("click",function(){openAuth(authMode==="login"?"register":"login");});
+    document.getElementById("authForm").addEventListener("submit",function(e){
+      e.preventDefault();
+      var u=document.getElementById("u").value.trim(), p=document.getElementById("p").value.trim();
+      if(!u||!p) return alert("请输入用户名和密码");
+      var found=db.users.find(function(x){return x.u===u;});
+      if(authMode==="register"){ if(found) return alert("用户名已存在"); db.users.push({u:u,p:p}); db.current=u; }
+      else { if(!found||found.p!==p) return alert("用户名或密码错误"); db.current=u; }
+      api.save().then(function(){closeAuth();authState();renderPosts();});
+    });
+    document.getElementById("logout").addEventListener("click",function(){ db.current=null; api.save().then(function(){authState();renderPosts();}); });
+    document.getElementById("postForm").addEventListener("submit",function(e){
+      e.preventDefault();
+      if(!mustLogin()) return;
+      var t=document.getElementById("title").value.trim(), c=document.getElementById("category").value, d=document.getElementById("desc").value.trim();
+      if(!t||!c||!d) return alert("请完整填写");
+      if(db.editId){ var p=db.posts.find(function(x){return x.id===db.editId;}); if(p){p.title=t;p.category=c;p.desc=d;} }
+      else db.posts.push({id:id("p"),author:db.current,title:t,category:c,desc:d,ts:Date.now()});
+      api.save().then(function(){resetForm();renderPosts();});
+    });
+    document.getElementById("cancelEdit").addEventListener("click",resetForm);
+    document.getElementById("chatSearch").addEventListener("input",renderChats);
+    document.getElementById("hallCategory").addEventListener("change",renderHall);
+    document.getElementById("hallKeyword").addEventListener("input",renderHall);
+    document.getElementById("send").addEventListener("click",send);
+    document.getElementById("msgInput").addEventListener("keydown",function(e){ if(e.key==="Enter") send(); });
+    document.getElementById("file").addEventListener("change",function(e){ var f=e.target.files[0]; if(!f) return; pendingFile=f.name; document.getElementById("fileName").textContent="已选择: "+f.name; });
+    document.getElementById("authModal").addEventListener("click",function(e){ if(e.target.id==="authModal") closeAuth(); });
+
+    authState(); renderPosts(); renderHall(); renderChats(); renderActive();
+  </script>
+</body>
+</html>
