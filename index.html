@@ -279,7 +279,7 @@
         <button id="authClose" class="rounded border px-2 py-1 text-xs">关闭</button>
       </div>
       <form id="authForm" class="space-y-2">
-        <input id="u" class="w-full rounded border px-2 py-2 text-sm" placeholder="用户名" />
+        <input id="u" class="w-full rounded border px-2 py-2 text-sm" placeholder="用户名或邮箱" />
         <input id="p" type="password" class="w-full rounded border px-2 py-2 text-sm" placeholder="密码" />
         <button class="w-full rounded bg-blue-600 px-3 py-2 text-sm text-white">确认</button>
       </form>
@@ -409,6 +409,21 @@
     }
     function syntheticEmailLegacy(username){
       return (username || "").trim().toLowerCase().replace(/\s+/g, "_") + "@innolink.local";
+    }
+    /** Real address if input contains @; otherwise synthetic *.supabase.co (username-only). */
+    function resolveAuthEmail(input){
+      var s = (input || "").trim();
+      if (!s) return "";
+      if (s.indexOf("@") !== -1) return s.toLowerCase();
+      return syntheticEmail(s);
+    }
+    function profileUsernameFromInput(input){
+      var s = (input || "").trim();
+      if (s.indexOf("@") !== -1) {
+        var part = s.split("@")[0].trim();
+        return part || s;
+      }
+      return s;
     }
     function defaultMeta(){
       return { attachments: [], allow_download_all: false, download_requests: [], approved_users: [], nda_signed_users: [], nda_sign_logs: [] };
@@ -1142,29 +1157,45 @@
     document.getElementById("authForm").addEventListener("submit",function(e){
       e.preventDefault();
       var u=document.getElementById("u").value.trim(), p=document.getElementById("p").value.trim();
-      if(!u||!p) return alert("请输入用户名和密码");
-      var email = syntheticEmail(u);
+      if(!u||!p) return alert("请输入用户名/邮箱和密码");
+      var email = resolveAuthEmail(u);
+      var profileName = profileUsernameFromInput(u);
       if (sb) {
         (async function(){
           if(authMode==="register"){
-            var reg = await sb.auth.signUp({ email: email, password: p, options: { data: { username: u } } });
-            if (reg.error) { alert(reg.error.message); return; }
+            var reg = await sb.auth.signUp({
+              email: email,
+              password: p,
+              options: {
+                data: { username: profileName },
+                emailRedirectTo: window.location.origin + "/"
+              }
+            });
+            if (reg.error) {
+              var em = (reg.error.message || "").toLowerCase();
+              if (em.indexOf("rate limit") !== -1) {
+                alert("发送验证邮件过于频繁，请稍后再试；或在 Supabase → Authentication → Providers → Email 中关闭「Confirm email」以便立即注册登录。");
+              } else {
+                alert(reg.error.message);
+              }
+              return;
+            }
             if (reg.data.session) {
-              await ensureProfile(u);
+              await ensureProfile(profileName);
               await hydrateUserFromSession(reg.data.session);
             } else {
-              alert("注册成功。若项目开启了邮箱验证，请查收邮件后再登录。");
+              alert("账号已创建。若开启了邮箱确认：请查收邮件并点击链接后再用同一邮箱登录；若收不到邮件，可在 Supabase 控制台关闭「Confirm email」后重新注册。");
               closeAuth();
               return;
             }
           } else {
             var lg = await sb.auth.signInWithPassword({ email: email, password: p });
-            if (lg.error) {
+            if (lg.error && u.indexOf("@") === -1) {
               var leg = await sb.auth.signInWithPassword({ email: syntheticEmailLegacy(u), password: p });
               if (!leg.error) lg = leg;
             }
             if (lg.error) { alert(lg.error.message); return; }
-            await ensureProfile(u);
+            await ensureProfile(profileName);
             await hydrateUserFromSession(lg.data.session);
           }
           closeAuth();
