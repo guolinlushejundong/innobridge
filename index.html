@@ -386,7 +386,30 @@
       save: function() { localStorage.setItem(KEY, JSON.stringify(db)); return Promise.resolve(); }
     };
 
-    function syntheticEmail(username){ return (username || "").trim().toLowerCase().replace(/\s+/g, "_") + "@innolink.local"; }
+    function usernameEmailHash(s){
+      var h = 2166136261;
+      for (var i = 0; i < (s || "").length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+      return ("0000000" + h.toString(16)).slice(-8);
+    }
+    function syntheticEmailHost(){
+      try {
+        var h = new URL(SUPABASE_URL).hostname;
+        if (h && /\.supabase\.co$/i.test(h)) return h;
+      } catch (e) {}
+      return "";
+    }
+    /** GoTrue rejects .local and non-ASCII local parts; domain must look like a normal host (use project *.supabase.co). */
+    function syntheticEmail(username){
+      var host = syntheticEmailHost() || "users.invalid";
+      var raw = (username || "").trim().toLowerCase().replace(/\s+/g, "_");
+      var ascii = raw.replace(/[^a-z0-9._+-]/g, "");
+      var local = ascii && /^[a-z0-9]/.test(ascii) ? ascii : ("u" + usernameEmailHash(raw || "x"));
+      if (local.length > 64) local = local.slice(0, 64);
+      return local + "@" + host;
+    }
+    function syntheticEmailLegacy(username){
+      return (username || "").trim().toLowerCase().replace(/\s+/g, "_") + "@innolink.local";
+    }
     function defaultMeta(){
       return { attachments: [], allow_download_all: false, download_requests: [], approved_users: [], nda_signed_users: [], nda_sign_logs: [] };
     }
@@ -492,9 +515,13 @@
     }
     async function hydrateUserFromSession(session){
       if (!sb || !session || !session.user) { db.current = null; return; }
+      var meta = session.user.user_metadata || {};
       var r = await sb.from("profiles").select("username").eq("id", session.user.id).maybeSingle();
       if (r.data && r.data.username) {
         db.current = r.data.username;
+      } else if (meta.username) {
+        db.current = meta.username;
+        await ensureProfile(db.current);
       } else {
         var localPart = (session.user.email || "").split("@")[0];
         db.current = localPart || null;
@@ -1132,6 +1159,10 @@
             }
           } else {
             var lg = await sb.auth.signInWithPassword({ email: email, password: p });
+            if (lg.error) {
+              var leg = await sb.auth.signInWithPassword({ email: syntheticEmailLegacy(u), password: p });
+              if (!leg.error) lg = leg;
+            }
             if (lg.error) { alert(lg.error.message); return; }
             await ensureProfile(u);
             await hydrateUserFromSession(lg.data.session);
