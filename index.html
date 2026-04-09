@@ -119,6 +119,36 @@
       </div>
       <div class="mt-4 rounded-xl border bg-white p-4">
         <h3 class="mb-3 font-semibold">最新内容</h3>
+        <div class="mb-3 grid gap-2 md:grid-cols-8">
+          <input id="homeKeyword" class="rounded border px-2 py-2 text-sm md:col-span-2" placeholder="搜索标题、简介、发布者" />
+          <select id="homeType" class="rounded border px-2 py-2 text-sm">
+            <option value="全部">全部类型</option>
+            <option value="idea">创意</option>
+            <option value="demand">需求</option>
+          </select>
+          <select id="homeCategory" class="rounded border px-2 py-2 text-sm">
+            <option value="全部">全部分类</option>
+            <option>硬科技</option>
+            <option>生物医药</option>
+            <option>AI应用</option>
+          </select>
+          <select id="homeProvince" class="rounded border px-2 py-2 text-sm">
+            <option value="全国">全国</option>
+          </select>
+          <select id="homeCity" class="rounded border px-2 py-2 text-sm">
+            <option value="全部">全部城市</option>
+          </select>
+          <button id="homeLocate" type="button" class="rounded border border-blue-200 bg-blue-50 px-2 py-2 text-sm text-blue-700">自动定位城市</button>
+          <button id="homeReset" type="button" class="rounded border px-2 py-2 text-sm">清空筛选</button>
+        </div>
+        <p id="homeLocateResult" class="mb-1 text-xs text-blue-700"></p>
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p id="homeCount" class="text-xs text-slate-500"></p>
+          <select id="homeSort" class="rounded border px-2 py-1.5 text-xs">
+            <option value="latest">发布时间：最新</option>
+            <option value="oldest">发布时间：最早</option>
+          </select>
+        </div>
         <div id="homeList" class="grid gap-3 md:grid-cols-2"></div>
       </div>
     </section>
@@ -237,6 +267,10 @@
           <option>生物医药</option>
           <option>AI应用</option>
         </select>
+        <div class="grid gap-2 md:grid-cols-2">
+          <select id="ideaProvince" class="rounded border px-2 py-2 text-sm"></select>
+          <select id="ideaCity" class="rounded border px-2 py-2 text-sm"></select>
+        </div>
         <textarea id="ideaDesc" class="w-full rounded border px-2 py-2 text-sm" rows="4" placeholder="创意简介"></textarea>
         <label class="block rounded border border-dashed px-3 py-2 text-sm text-slate-600">
           上传附件/图片
@@ -262,6 +296,10 @@
           <option>生物医药</option>
           <option>AI应用</option>
         </select>
+        <div class="grid gap-2 md:grid-cols-2">
+          <select id="demandProvince" class="rounded border px-2 py-2 text-sm"></select>
+          <select id="demandCity" class="rounded border px-2 py-2 text-sm"></select>
+        </div>
         <textarea id="demandDesc" class="w-full rounded border px-2 py-2 text-sm" rows="4" placeholder="需求描述"></textarea>
         <label class="block rounded border border-dashed px-3 py-2 text-sm text-slate-600">
           上传附件/图片
@@ -333,6 +371,8 @@
         approvedUsers: m.approved_users || [],
         ndaSignedUsers: m.nda_signed_users || [],
         ndaSignLogs: m.nda_sign_logs || [],
+        regionProvince: m.region_province || "",
+        regionCity: m.region_city || "",
         author_id: r.author_id
       };
     }
@@ -343,7 +383,9 @@
         download_requests: p.downloadRequests || [],
         approved_users: p.approvedUsers || [],
         nda_signed_users: p.ndaSignedUsers || [],
-        nda_sign_logs: p.ndaSignLogs || []
+        nda_sign_logs: p.ndaSignLogs || [],
+        region_province: p.regionProvince || "",
+        region_city: p.regionCity || ""
       };
     }
     function rowToChat(r){
@@ -434,15 +476,133 @@
       return '<span class="rounded-full px-2 py-0.5 text-[11px] '+style+'">'+text+'</span>';
     }
 
+    var REGION_FALLBACK = {
+      "北京市": ["北京市"],
+      "天津市": ["天津市"],
+      "上海市": ["上海市"],
+      "重庆市": ["重庆市"],
+      "河北省": ["石家庄市", "唐山市", "保定市"],
+      "山西省": ["太原市", "大同市", "运城市"],
+      "辽宁省": ["沈阳市", "大连市", "鞍山市"],
+      "吉林省": ["长春市", "吉林市", "延边朝鲜族自治州"],
+      "黑龙江省": ["哈尔滨市", "齐齐哈尔市", "大庆市"],
+      "江苏省": ["南京市", "苏州市", "无锡市"],
+      "浙江省": ["杭州市", "宁波市", "温州市"],
+      "安徽省": ["合肥市", "芜湖市", "阜阳市"],
+      "福建省": ["福州市", "厦门市", "泉州市"],
+      "江西省": ["南昌市", "赣州市", "九江市"],
+      "山东省": ["济南市", "青岛市", "烟台市"],
+      "河南省": ["郑州市", "洛阳市", "南阳市"],
+      "湖北省": ["武汉市", "襄阳市", "宜昌市"],
+      "湖南省": ["长沙市", "株洲市", "岳阳市"],
+      "广东省": ["广州市", "深圳市", "东莞市"],
+      "海南省": ["海口市", "三亚市", "儋州市"],
+      "四川省": ["成都市", "绵阳市", "德阳市"],
+      "贵州省": ["贵阳市", "遵义市", "毕节市"],
+      "云南省": ["昆明市", "曲靖市", "大理白族自治州"],
+      "陕西省": ["西安市", "咸阳市", "榆林市"],
+      "甘肃省": ["兰州市", "天水市", "酒泉市"],
+      "青海省": ["西宁市", "海东市", "海西蒙古族藏族自治州"],
+      "内蒙古自治区": ["呼和浩特市", "包头市", "鄂尔多斯市"],
+      "广西壮族自治区": ["南宁市", "柳州市", "桂林市"],
+      "西藏自治区": ["拉萨市", "日喀则市", "林芝市"],
+      "宁夏回族自治区": ["银川市", "吴忠市", "中卫市"],
+      "新疆维吾尔自治区": ["乌鲁木齐市", "喀什地区", "伊犁哈萨克自治州"],
+      "香港特别行政区": ["香港岛", "九龙", "新界"],
+      "澳门特别行政区": ["澳门半岛", "氹仔", "路环"],
+      "台湾省": ["台北市", "新北市", "高雄市"]
+    };
+    var REGION_DATA = JSON.parse(JSON.stringify(REGION_FALLBACK));
+    function setSelectOptions(selectId, list, firstLabel, firstValue){
+      var el = document.getElementById(selectId);
+      var arr = [];
+      if (firstLabel !== undefined) arr.push('<option value="'+(firstValue===undefined?firstLabel:firstValue)+'">'+firstLabel+'</option>');
+      arr = arr.concat((list || []).map(function(x){ return '<option value="'+x+'">'+x+'</option>'; }));
+      el.innerHTML = arr.join("");
+    }
+    function initRegionSelectors(){
+      var provinces = Object.keys(REGION_DATA);
+      setSelectOptions("ideaProvince", provinces, "选择省份", "");
+      setSelectOptions("ideaCity", [], "选择城市", "");
+      setSelectOptions("demandProvince", provinces, "选择省份", "");
+      setSelectOptions("demandCity", [], "选择城市", "");
+      setSelectOptions("homeProvince", provinces, "全国", "全国");
+      setSelectOptions("homeCity", [], "全部城市", "全部");
+    }
+    function syncCityOptions(provinceSelectId, citySelectId, defaultLabel, keepAll){
+      var province = document.getElementById(provinceSelectId).value;
+      var cities = REGION_DATA[province] || [];
+      if (keepAll) setSelectOptions(citySelectId, cities, "全部城市", "全部");
+      else setSelectOptions(citySelectId, cities, defaultLabel || "选择城市", "");
+    }
+    function normalizeRegionName(name){
+      return (name || "")
+        .replace(/(特别行政区|维吾尔自治区|壮族自治区|回族自治区|自治区|省|市|自治州|地区)$/g, "")
+        .trim();
+    }
+    function guessProvinceAndCity(addr){
+      var text = [addr.province, addr.city, addr.county, addr.state, addr.region || ""].join(" ");
+      var province = "";
+      var city = "";
+      Object.keys(REGION_DATA).some(function(p){
+        var pHit = text.indexOf(p) > -1 || text.indexOf(normalizeRegionName(p)) > -1;
+        if (!pHit) return false;
+        province = p;
+        var cities = REGION_DATA[p] || [];
+        var foundCity = cities.find(function(cn){
+          return text.indexOf(cn) > -1 || text.indexOf(normalizeRegionName(cn)) > -1;
+        });
+        city = foundCity || (cities[0] || "");
+        return true;
+      });
+      return { province: province, city: city };
+    }
+    function loadNationalRegionData(){
+      var url = "https://unpkg.com/element-china-area-data@6.1.0/dist/area.json";
+      return fetch(url).then(function(r){ return r.json(); }).then(function(data){
+        if (!data || !data["86"]) return;
+        var provincesMap = data["86"];
+        var next = {};
+        Object.keys(provincesMap).forEach(function(code){
+          var provinceName = provincesMap[code];
+          var cityMap = data[code] || {};
+          var cities = Object.keys(cityMap).map(function(k){ return cityMap[k]; }).filter(Boolean);
+          if (!cities.length) cities = [provinceName];
+          next[provinceName] = Array.from(new Set(cities));
+        });
+        if (Object.keys(next).length) REGION_DATA = next;
+      }).catch(function(err){
+        console.warn("加载全国省市数据失败，使用内置地区数据", err);
+      });
+    }
+
     function postHtml(p,mine){
       var actions = mine ? '<div class="mt-2 flex gap-1"><button class="edit border rounded px-2 py-1 text-xs" data-id="'+p.id+'">编辑</button><button class="del border rounded px-2 py-1 text-xs text-rose-700 border-rose-200 bg-rose-50" data-id="'+p.id+'">删除</button><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div>' : '<div class="mt-2 flex gap-1"><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div>';
       var pop = p.id === recentPostId ? " post-pop" : "";
-      return '<div class="rounded border p-3'+pop+'" data-post-id="'+p.id+'"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+badgeHtml(p.postType, p.badge)+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="text-sm text-slate-600">'+p.desc+'</p><p class="mt-1 text-xs text-slate-500">发布者: '+p.author+'</p>'+actions+'</div>';
+      var region = p.regionProvince ? ('<span class="rounded bg-fuchsia-50 px-2 py-1 text-fuchsia-700">📍 '+p.regionProvince+(p.regionCity?(' · '+p.regionCity):'')+'</span>') : '';
+      return '<div class="rounded border p-3'+pop+'" data-post-id="'+p.id+'"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+badgeHtml(p.postType, p.badge)+region+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="text-sm text-slate-600">'+p.desc+'</p><p class="mt-1 text-xs text-slate-500">发布者: '+p.author+'</p>'+actions+'</div>';
     }
 
     function renderPosts(){
       var posts = db.posts.slice().sort(function(a,b){return b.ts-a.ts;});
-      document.getElementById("homeList").innerHTML = posts.map(function(p){return postHtml(p,false);}).join("") || '<p class="text-sm text-slate-500">暂无</p>';
+      var hq = (document.getElementById("homeKeyword").value || "").trim().toLowerCase();
+      var ht = document.getElementById("homeType").value || "全部";
+      var hc = document.getElementById("homeCategory").value || "全部";
+      var hs = document.getElementById("homeSort").value || "latest";
+      var hp = document.getElementById("homeProvince").value || "全国";
+      var hcity = document.getElementById("homeCity").value || "全部";
+      var homeList = posts.filter(function(p){
+        var t = (p.title + " " + p.desc + " " + p.author).toLowerCase();
+        var okKeyword = !hq || t.indexOf(hq) > -1;
+        var okType = ht === "全部" || (p.postType || "idea") === ht;
+        var okCategory = hc === "全部" || p.category === hc;
+        var okProvince = hp === "全国" || (p.regionProvince || "") === hp;
+        var okCity = hcity === "全部" || (p.regionCity || "") === hcity;
+        return okKeyword && okType && okCategory && okProvince && okCity;
+      });
+      homeList.sort(function(a,b){ return hs === "oldest" ? (a.ts - b.ts) : (b.ts - a.ts); });
+      document.getElementById("homeCount").textContent = "检索结果：共 " + homeList.length + " 条";
+      document.getElementById("homeList").innerHTML = homeList.map(function(p){return postHtml(p,false);}).join("") || '<p class="text-sm text-slate-500">暂无匹配内容</p>';
       var mine = db.current ? posts.filter(function(p){return p.author===db.current;}) : [];
       var mineIdeas = mine.filter(function(p){ return (p.postType || "idea") === "idea"; });
       var mineDemands = mine.filter(function(p){ return p.postType === "demand"; });
@@ -450,7 +610,7 @@
       document.getElementById("mineDemandList").innerHTML = mineDemands.map(function(p){return postHtml(p,true);}).join("") || '<p class="text-sm text-slate-500">暂无需求发布</p>';
       document.querySelectorAll(".tochat").forEach(function(b){ b.addEventListener("click", function(){ if(!mustLogin()) return; openOrCreateChat(b.dataset.name,b.dataset.project); setPage("chat"); });});
       document.querySelectorAll(".viewpost").forEach(function(b){ b.addEventListener("click", function(){ openPostDetail(b.dataset.id); });});
-      document.querySelectorAll(".edit").forEach(function(b){ b.addEventListener("click", function(){ var p=db.posts.find(function(x){return x.id===b.dataset.id;}); if(!p) return; var modalId = p.postType === "demand" ? "demandModal" : "ideaModal"; document.getElementById((p.postType === "demand" ? "demandTitle" : "ideaTitle")).value = p.title; document.getElementById((p.postType === "demand" ? "demandCategory" : "ideaCategory")).value = p.category; document.getElementById((p.postType === "demand" ? "demandDesc" : "ideaDesc")).value = p.desc; openModal(modalId); db.editId = p.id; });});
+      document.querySelectorAll(".edit").forEach(function(b){ b.addEventListener("click", function(){ var p=db.posts.find(function(x){return x.id===b.dataset.id;}); if(!p) return; var isDemand = p.postType === "demand"; var modalId = isDemand ? "demandModal" : "ideaModal"; document.getElementById(isDemand ? "demandTitle" : "ideaTitle").value = p.title; document.getElementById(isDemand ? "demandCategory" : "ideaCategory").value = p.category; document.getElementById(isDemand ? "demandDesc" : "ideaDesc").value = p.desc; document.getElementById(isDemand ? "demandProvince" : "ideaProvince").value = p.regionProvince || ""; syncCityOptions(isDemand ? "demandProvince" : "ideaProvince", isDemand ? "demandCity" : "ideaCity", "选择城市", false); document.getElementById(isDemand ? "demandCity" : "ideaCity").value = p.regionCity || ""; openModal(modalId); db.editId = p.id; });});
       document.querySelectorAll(".del").forEach(function(b){ b.addEventListener("click", function(){
         if(!confirm("确认删除?")) return;
         if (sb) {
@@ -467,7 +627,8 @@
     }
 
     function hallCard(p){
-      return '<article class="rounded-xl border bg-white p-3"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+badgeHtml(p.postType, p.badge)+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleDateString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="mt-1 line-clamp-2 text-sm text-slate-600">'+p.desc+'</p><div class="mt-2 flex items-center justify-between"><span class="text-xs text-slate-500">'+p.author+'</span><div class="flex gap-1"><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">立即沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div></div></article>';
+      var region = p.regionProvince ? ('<span class="rounded bg-fuchsia-50 px-2 py-1 text-fuchsia-700">📍 '+p.regionProvince+(p.regionCity?(" · "+p.regionCity):"")+'</span>') : '<span class="rounded bg-slate-100 px-2 py-1 text-slate-500">未填写地区</span>';
+      return '<article class="rounded-xl border bg-white p-3"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+badgeHtml(p.postType, p.badge)+region+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleDateString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="mt-1 line-clamp-2 text-sm text-slate-600">'+p.desc+'</p><div class="mt-2 flex items-center justify-between"><span class="text-xs text-slate-500">'+p.author+'</span><div class="flex gap-1"><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">立即沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div></div></article>';
     }
 
     function renderHall(){
@@ -555,7 +716,7 @@
       }).join("") : '<p class="text-xs text-slate-500">暂无签署记录</p>';
 
       document.getElementById("postDetailBody").innerHTML =
-        '<div><h4 class="text-lg font-semibold">'+p.title+'</h4><p class="mt-1 text-sm text-slate-600">'+p.desc+'</p><p class="mt-1 text-xs text-slate-500">发布者: '+p.author+' · '+new Date(p.ts).toLocaleString()+'</p></div>'+
+        '<div><h4 class="text-lg font-semibold">'+p.title+'</h4><p class="mt-1 text-sm text-slate-600">'+p.desc+'</p><p class="mt-1 text-xs text-slate-500">发布者: '+p.author+' · 地区: '+((p.regionProvince||"未填写") + (p.regionCity?(" / "+p.regionCity):""))+' · '+new Date(p.ts).toLocaleString()+'</p></div>'+
         '<div><h5 class="mb-2 text-sm font-semibold">附件列表</h5>'+filesHtml+'</div>'+
         ndaSections+
         '<div class="rounded border bg-white p-3"><h5 class="mb-2 text-sm font-semibold">签署记录</h5>'+signLogs+'</div>'+
@@ -731,26 +892,26 @@
       }));
     }
 
-    function savePost(postType, title, category, desc, attachments){
-      if(!mustLogin()) return;
-      if(!title||!category||!desc) return alert("请完整填写");
+    function savePost(postType, title, category, desc, attachments, province, city){
+      if(!mustLogin()) return Promise.resolve(false);
+      if(!title||!category||!desc||!province||!city) { alert("请完整填写（含地区）"); return Promise.resolve(false); }
       if (sb) {
-        (async function(){
+        return (async function(){
           var u = await sb.auth.getUser();
           var uid = u.data.user && u.data.user.id;
-          if (!uid) { alert("请先登录"); return; }
+          if (!uid) { alert("请先登录"); return false; }
           if(db.editId){
             var p=db.posts.find(function(x){return x.id===db.editId;});
-            if(!p) return;
+            if(!p) return false;
             var nextAtt = attachments && attachments.length ? attachments : (p.attachments || []);
             var res = await sb.from("posts").update({
               title: title,
               category: category,
               description: desc,
               post_type: postType,
-              meta: Object.assign({}, metaFromPost(p), { attachments: nextAtt })
+              meta: Object.assign({}, metaFromPost(p), { attachments: nextAtt, region_province: province, region_city: city })
             }).eq("id", db.editId);
-            if (res.error) { alert(res.error.message); return; }
+            if (res.error) { alert("发布失败: " + res.error.message); return false; }
           } else {
             var ins = await sb.from("posts").insert({
               author_id: uid,
@@ -760,30 +921,31 @@
               description: desc,
               post_type: postType,
               badge: postType==="demand" ? "待审核" : "刚刚发布",
-              meta: Object.assign(defaultMeta(), { attachments: attachments || [] })
+              meta: Object.assign(defaultMeta(), { attachments: attachments || [], region_province: province, region_city: city })
             }).select("id").single();
-            if (ins.error) { alert(ins.error.message); return; }
+            if (ins.error) { alert("发布失败: " + ins.error.message); return false; }
             recentPostId = ins.data.id;
           }
           db.editId = "";
           await fetchPostsFromSb();
           renderPosts();
           if (recentPostId) setTimeout(function(){ recentPostId = ""; renderPosts(); }, 1200);
+          return true;
         })();
-        return;
       }
       if(db.editId){
         var p=db.posts.find(function(x){return x.id===db.editId;});
-        if(p){ p.title=title; p.category=category; p.desc=desc; p.postType=postType; p.attachments = attachments && attachments.length ? attachments : (p.attachments || []); }
+        if(p){ p.title=title; p.category=category; p.desc=desc; p.postType=postType; p.regionProvince=province; p.regionCity=city; p.attachments = attachments && attachments.length ? attachments : (p.attachments || []); }
       } else {
         var newId = id("p");
         recentPostId = newId;
-        db.posts.push({id:newId,author:db.current,title:title,category:category,desc:desc,ts:Date.now(),postType:postType,badge:postType==="demand"?"待审核":"刚刚发布",attachments:attachments || [],allowDownloadAll:false,downloadRequests:[],approvedUsers:[],ndaSignedUsers:[],ndaSignLogs:[]});
+        db.posts.push({id:newId,author:db.current,title:title,category:category,desc:desc,ts:Date.now(),postType:postType,badge:postType==="demand"?"待审核":"刚刚发布",regionProvince:province,regionCity:city,attachments:attachments || [],allowDownloadAll:false,downloadRequests:[],approvedUsers:[],ndaSignedUsers:[],ndaSignLogs:[]});
       }
       db.editId = "";
-      api.save().then(function(){
+      return api.save().then(function(){
         renderPosts();
         if (recentPostId) setTimeout(function(){ recentPostId = ""; renderPosts(); }, 1200);
+        return true;
       });
     }
 
@@ -854,19 +1016,110 @@
       e.preventDefault();
       filesToData(document.getElementById("ideaFiles").files).then(function(list){
         var finalFiles = list.length ? list : pendingIdeaAttachments;
-        savePost("idea", document.getElementById("ideaTitle").value.trim(), document.getElementById("ideaCategory").value, document.getElementById("ideaDesc").value.trim(), finalFiles);
-        closeModal("ideaModal"); document.getElementById("ideaForm").reset(); pendingIdeaAttachments = []; document.getElementById("ideaFilesPreview").textContent = "";
+        return savePost("idea", document.getElementById("ideaTitle").value.trim(), document.getElementById("ideaCategory").value, document.getElementById("ideaDesc").value.trim(), finalFiles, document.getElementById("ideaProvince").value, document.getElementById("ideaCity").value);
+      }).then(function(ok){
+        if (!ok) return;
+        closeModal("ideaModal");
+        document.getElementById("ideaForm").reset();
+        syncCityOptions("ideaProvince", "ideaCity", "选择城市", false);
+        pendingIdeaAttachments = [];
+        document.getElementById("ideaFilesPreview").textContent = "";
+      }).catch(function(err){
+        alert("发布失败，请稍后重试");
+        console.error(err);
       });
     });
     document.getElementById("demandForm").addEventListener("submit",function(e){
       e.preventDefault();
       filesToData(document.getElementById("demandFiles").files).then(function(list){
         var finalFiles = list.length ? list : pendingDemandAttachments;
-        savePost("demand", document.getElementById("demandTitle").value.trim(), document.getElementById("demandCategory").value, document.getElementById("demandDesc").value.trim(), finalFiles);
-        closeModal("demandModal"); document.getElementById("demandForm").reset(); pendingDemandAttachments = []; document.getElementById("demandFilesPreview").textContent = "";
+        return savePost("demand", document.getElementById("demandTitle").value.trim(), document.getElementById("demandCategory").value, document.getElementById("demandDesc").value.trim(), finalFiles, document.getElementById("demandProvince").value, document.getElementById("demandCity").value);
+      }).then(function(ok){
+        if (!ok) return;
+        closeModal("demandModal");
+        document.getElementById("demandForm").reset();
+        syncCityOptions("demandProvince", "demandCity", "选择城市", false);
+        pendingDemandAttachments = [];
+        document.getElementById("demandFilesPreview").textContent = "";
+      }).catch(function(err){
+        alert("发布失败，请稍后重试");
+        console.error(err);
       });
     });
     document.getElementById("chatSearch").addEventListener("input",renderChats);
+    document.getElementById("homeKeyword").addEventListener("input", renderPosts);
+    document.getElementById("homeType").addEventListener("change", renderPosts);
+    document.getElementById("homeCategory").addEventListener("change", renderPosts);
+    document.getElementById("homeSort").addEventListener("change", renderPosts);
+    document.getElementById("homeProvince").addEventListener("change", function(){
+      syncCityOptions("homeProvince", "homeCity", "全部城市", true);
+      renderPosts();
+    });
+    document.getElementById("homeCity").addEventListener("change", renderPosts);
+    document.getElementById("homeLocate").addEventListener("click", function(){
+      var locateBtn = document.getElementById("homeLocate");
+      var locateTip = document.getElementById("homeLocateResult");
+      var oldText = locateBtn.textContent;
+      locateBtn.disabled = true;
+      locateBtn.textContent = "定位中...";
+      locateTip.textContent = "正在获取你当前城市，请稍候...";
+      if (!navigator.geolocation) {
+        locateBtn.disabled = false;
+        locateBtn.textContent = oldText;
+        locateTip.textContent = "";
+        alert("当前浏览器不支持地理定位，请手动选择省市");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(function(pos){
+        var lat = pos.coords.latitude;
+        var lon = pos.coords.longitude;
+        fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=zh-CN&lat="+lat+"&lon="+lon)
+          .then(function(r){ return r.json(); })
+          .then(function(data){
+            var addr = (data && data.address) || {};
+            var hit = guessProvinceAndCity(addr);
+            if (!hit.province) {
+              locateBtn.disabled = false;
+              locateBtn.textContent = oldText;
+              locateTip.textContent = "";
+              alert("自动定位成功，但未匹配到省市，请手动选择");
+              return;
+            }
+            document.getElementById("homeProvince").value = hit.province;
+            syncCityOptions("homeProvince", "homeCity", "全部城市", true);
+            if (hit.city) document.getElementById("homeCity").value = hit.city;
+            locateTip.textContent = "已定位： " + hit.province + (hit.city ? (" / " + hit.city) : "");
+            locateBtn.disabled = false;
+            locateBtn.textContent = oldText;
+            renderPosts();
+          })
+          .catch(function(){
+            locateBtn.disabled = false;
+            locateBtn.textContent = oldText;
+            locateTip.textContent = "";
+            alert("定位解析失败，请手动选择省市");
+          });
+      }, function(err){
+        locateBtn.disabled = false;
+        locateBtn.textContent = oldText;
+        locateTip.textContent = "";
+        var msg = "定位失败，请授权地理位置权限后重试";
+        if (err && err.code === 1) msg = "你拒绝了定位权限，请在浏览器中允许定位后重试";
+        alert(msg);
+      }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 });
+    });
+    document.getElementById("ideaProvince").addEventListener("change", function(){ syncCityOptions("ideaProvince", "ideaCity", "选择城市", false); });
+    document.getElementById("demandProvince").addEventListener("change", function(){ syncCityOptions("demandProvince", "demandCity", "选择城市", false); });
+    document.getElementById("homeReset").addEventListener("click", function(){
+      document.getElementById("homeKeyword").value = "";
+      document.getElementById("homeType").value = "全部";
+      document.getElementById("homeCategory").value = "全部";
+      document.getElementById("homeSort").value = "latest";
+      document.getElementById("homeProvince").value = "全国";
+      syncCityOptions("homeProvince", "homeCity", "全部城市", true);
+      document.getElementById("homeLocateResult").textContent = "";
+      renderPosts();
+    });
     document.getElementById("hallCategory").addEventListener("change",renderHall);
     document.getElementById("hallKeyword").addEventListener("input",renderHall);
     document.getElementById("send").addEventListener("click",send);
@@ -903,6 +1156,18 @@
     });
 
     function initApp(){
+      initRegionSelectors();
+      loadNationalRegionData().then(function(){
+        var oldHomeProvince = document.getElementById("homeProvince").value;
+        var oldHomeCity = document.getElementById("homeCity").value;
+        initRegionSelectors();
+        if (oldHomeProvince && (oldHomeProvince === "全国" || REGION_DATA[oldHomeProvince])) {
+          document.getElementById("homeProvince").value = oldHomeProvince;
+          syncCityOptions("homeProvince", "homeCity", "全部城市", true);
+          if (oldHomeCity) document.getElementById("homeCity").value = oldHomeCity;
+        }
+        renderPosts();
+      });
       if (sb) {
         sb.auth.getSession().then(function(res){
           var session = res.data.session;
