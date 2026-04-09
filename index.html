@@ -301,6 +301,7 @@
           <option>生物医药</option>
           <option>AI应用</option>
         </select>
+        <p class="text-xs text-slate-500">地区（选填）</p>
         <div class="grid gap-2 md:grid-cols-2">
           <select id="ideaProvince" class="rounded border px-2 py-2 text-sm"></select>
           <select id="ideaCity" class="rounded border px-2 py-2 text-sm"></select>
@@ -330,6 +331,7 @@
           <option>生物医药</option>
           <option>AI应用</option>
         </select>
+        <p class="text-xs text-slate-500">地区（选填）</p>
         <div class="grid gap-2 md:grid-cols-2">
           <select id="demandProvince" class="rounded border px-2 py-2 text-sm"></select>
           <select id="demandCity" class="rounded border px-2 py-2 text-sm"></select>
@@ -614,10 +616,10 @@
     }
     function initRegionSelectors(){
       var provinces = Object.keys(REGION_DATA);
-      setSelectOptions("ideaProvince", provinces, "选择省份", "");
-      setSelectOptions("ideaCity", [], "选择城市", "");
-      setSelectOptions("demandProvince", provinces, "选择省份", "");
-      setSelectOptions("demandCity", [], "选择城市", "");
+      setSelectOptions("ideaProvince", provinces, "省份（选填）", "");
+      setSelectOptions("ideaCity", [], "城市（选填）", "");
+      setSelectOptions("demandProvince", provinces, "省份（选填）", "");
+      setSelectOptions("demandCity", [], "城市（选填）", "");
       setSelectOptions("homeProvince", provinces, "全国", "全国");
       setSelectOptions("homeCity", [], "全部城市", "全部");
     }
@@ -625,7 +627,7 @@
       var province = document.getElementById(provinceSelectId).value;
       var cities = REGION_DATA[province] || [];
       if (keepAll) setSelectOptions(citySelectId, cities, "全部城市", "全部");
-      else setSelectOptions(citySelectId, cities, defaultLabel || "选择城市", "");
+      else setSelectOptions(citySelectId, cities, defaultLabel || "城市（选填）", "");
     }
     function normalizeRegionName(name){
       return (name || "")
@@ -703,7 +705,7 @@
       document.getElementById("mineDemandList").innerHTML = mineDemands.map(function(p){return postHtml(p,true);}).join("") || '<p class="text-sm text-slate-500">暂无需求发布</p>';
       document.querySelectorAll(".tochat").forEach(function(b){ b.addEventListener("click", function(){ if(!mustLogin()) return; openOrCreateChat(b.dataset.name,b.dataset.project); setPage("chat"); });});
       document.querySelectorAll(".viewpost").forEach(function(b){ b.addEventListener("click", function(){ openPostDetail(b.dataset.id); });});
-      document.querySelectorAll(".edit").forEach(function(b){ b.addEventListener("click", function(){ var p=db.posts.find(function(x){return x.id===b.dataset.id;}); if(!p) return; var isDemand = p.postType === "demand"; var modalId = isDemand ? "demandModal" : "ideaModal"; document.getElementById(isDemand ? "demandTitle" : "ideaTitle").value = p.title; document.getElementById(isDemand ? "demandCategory" : "ideaCategory").value = p.category; document.getElementById(isDemand ? "demandDesc" : "ideaDesc").value = p.desc; document.getElementById(isDemand ? "demandProvince" : "ideaProvince").value = p.regionProvince || ""; syncCityOptions(isDemand ? "demandProvince" : "ideaProvince", isDemand ? "demandCity" : "ideaCity", "选择城市", false); document.getElementById(isDemand ? "demandCity" : "ideaCity").value = p.regionCity || ""; openModal(modalId); db.editId = p.id; });});
+      document.querySelectorAll(".edit").forEach(function(b){ b.addEventListener("click", function(){ var p=db.posts.find(function(x){return x.id===b.dataset.id;}); if(!p) return; var isDemand = p.postType === "demand"; var modalId = isDemand ? "demandModal" : "ideaModal"; document.getElementById(isDemand ? "demandTitle" : "ideaTitle").value = p.title; document.getElementById(isDemand ? "demandCategory" : "ideaCategory").value = p.category; document.getElementById(isDemand ? "demandDesc" : "ideaDesc").value = p.desc; document.getElementById(isDemand ? "demandProvince" : "ideaProvince").value = p.regionProvince || ""; syncCityOptions(isDemand ? "demandProvince" : "ideaProvince", isDemand ? "demandCity" : "ideaCity", "城市（选填）", false); document.getElementById(isDemand ? "demandCity" : "ideaCity").value = p.regionCity || ""; openModal(modalId); db.editId = p.id; });});
       document.querySelectorAll(".del").forEach(function(b){ b.addEventListener("click", function(){
         if(!confirm("确认删除?")) return;
         if (sb) {
@@ -1094,7 +1096,7 @@
 
     function savePost(postType, title, category, desc, attachments, province, city){
       if(!mustLogin()) return Promise.resolve(false);
-      if(!title||!category||!desc||!province||!city) { alert("请完整填写（含地区）"); return Promise.resolve(false); }
+      if(!title||!category||!desc) { alert("请填写标题、分类与简介"); return Promise.resolve(false); }
       if (sb) {
         return (async function(){
           var u = await sb.auth.getUser();
@@ -1242,7 +1244,7 @@
         if (!ok) return;
         closeModal("ideaModal");
         document.getElementById("ideaForm").reset();
-        syncCityOptions("ideaProvince", "ideaCity", "选择城市", false);
+        syncCityOptions("ideaProvince", "ideaCity", "城市（选填）", false);
         pendingIdeaAttachments = [];
         document.getElementById("ideaFilesPreview").textContent = "";
       }).catch(function(err){
@@ -1258,7 +1260,7 @@
         if (!ok) return;
         closeModal("demandModal");
         document.getElementById("demandForm").reset();
-        syncCityOptions("demandProvince", "demandCity", "选择城市", false);
+        syncCityOptions("demandProvince", "demandCity", "城市（选填）", false);
         pendingDemandAttachments = [];
         document.getElementById("demandFilesPreview").textContent = "";
       }).catch(function(err){
@@ -1328,8 +1330,8 @@
         alert(msg);
       }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 });
     });
-    document.getElementById("ideaProvince").addEventListener("change", function(){ syncCityOptions("ideaProvince", "ideaCity", "选择城市", false); });
-    document.getElementById("demandProvince").addEventListener("change", function(){ syncCityOptions("demandProvince", "demandCity", "选择城市", false); });
+    document.getElementById("ideaProvince").addEventListener("change", function(){ syncCityOptions("ideaProvince", "ideaCity", "城市（选填）", false); });
+    document.getElementById("demandProvince").addEventListener("change", function(){ syncCityOptions("demandProvince", "demandCity", "城市（选填）", false); });
     document.getElementById("homeReset").addEventListener("click", function(){
       document.getElementById("homeKeyword").value = "";
       document.getElementById("homeType").value = "全部";
