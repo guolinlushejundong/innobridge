@@ -283,13 +283,138 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
   <script>
+    var SUPABASE_URL = "YOUR_SUPABASE_URL";
+    var SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
     var KEY = "innolink_v3";
     var db = JSON.parse(localStorage.getItem(KEY) || "{}");
-    if (!db.users) db = { users: [], current: null, posts: [{ id: "p1", author: "平台示例", title: "AI 农业传感器", category: "AI应用", desc: "寻找合作企业", ts: Date.now(), postType: "idea", badge: "刚刚发布" }], chats: [{ id: "c1", name: "平台顾问", role: "企业创新主管", project: "平台咨询", online: true, unread: 1, messages: [{ side: "left", text: "欢迎使用 InnoLink", read: false, ts: Date.now() }] }] };
+    function defaultLocalDb(){
+      if (!db.users) db.users = [];
+      if (db.current === undefined) db.current = null;
+      if (!db.posts || !db.posts.length) db.posts = [{ id: "p1", author: "平台示例", title: "AI 农业传感器", category: "AI应用", desc: "寻找合作企业", ts: Date.now(), postType: "idea", badge: "刚刚发布", attachments: [], allowDownloadAll: false, downloadRequests: [], approvedUsers: [], ndaSignedUsers: [], ndaSignLogs: [] }];
+      if (!db.chats || !db.chats.length) db.chats = [{ id: "c1", name: "平台顾问", role: "企业创新主管", project: "平台咨询", online: true, unread: 1, messages: [{ side: "left", text: "欢迎使用 InnoLink", read: false, ts: Date.now() }] }];
+    }
+    defaultLocalDb();
+
+    var sb = null;
+    try {
+      var SB = typeof supabase !== "undefined" ? supabase : (typeof window !== "undefined" ? window.supabase : null);
+      if (SB && SB.createClient && SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_URL.indexOf("YOUR_") !== 0 && SUPABASE_ANON_KEY.indexOf("YOUR_") !== 0) {
+        sb = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+    } catch (e) { sb = null; }
+
     var authMode = "login", activeChatId = "", pendingFile = "", recentPostId = "", activePostId = "";
     var pendingIdeaAttachments = [], pendingDemandAttachments = [];
-    var api = { save: function() { localStorage.setItem(KEY, JSON.stringify(db)); return Promise.resolve(); } };
+    var api = {
+      save: function() { localStorage.setItem(KEY, JSON.stringify(db)); return Promise.resolve(); }
+    };
+
+    function syntheticEmail(username){ return (username || "").trim().toLowerCase().replace(/\s+/g, "_") + "@innolink.local"; }
+    function defaultMeta(){
+      return { attachments: [], allow_download_all: false, download_requests: [], approved_users: [], nda_signed_users: [], nda_sign_logs: [] };
+    }
+    function rowToPost(r){
+      var m = r.meta || {};
+      return {
+        id: r.id,
+        author: r.author_name,
+        title: r.title,
+        category: r.category,
+        desc: r.description,
+        ts: new Date(r.created_at).getTime(),
+        postType: r.post_type,
+        badge: r.badge || "",
+        attachments: m.attachments || [],
+        allowDownloadAll: !!m.allow_download_all,
+        downloadRequests: m.download_requests || [],
+        approvedUsers: m.approved_users || [],
+        ndaSignedUsers: m.nda_signed_users || [],
+        ndaSignLogs: m.nda_sign_logs || [],
+        author_id: r.author_id
+      };
+    }
+    function metaFromPost(p){
+      return {
+        attachments: p.attachments || [],
+        allow_download_all: !!p.allowDownloadAll,
+        download_requests: p.downloadRequests || [],
+        approved_users: p.approvedUsers || [],
+        nda_signed_users: p.ndaSignedUsers || [],
+        nda_sign_logs: p.ndaSignLogs || []
+      };
+    }
+    function rowToChat(r){
+      return {
+        id: r.id,
+        name: r.peer_display_name,
+        project: r.project_title,
+        role: r.role || inferRole(r.peer_display_name),
+        online: !!r.online,
+        unread: r.unread_count || 0,
+        messages: [],
+        _messagesLoaded: false
+      };
+    }
+
+    function fetchPostsFromSb(){
+      if (!sb) return Promise.resolve();
+      return sb.from("posts").select("*").order("created_at", { ascending: false }).then(function(res){
+        if (res.error) { console.error(res.error); return; }
+        db.posts = (res.data || []).map(rowToPost);
+      });
+    }
+    function fetchChatsFromSb(){
+      if (!sb) return Promise.resolve();
+      return sb.from("chats").select("*").order("created_at", { ascending: false }).then(function(res){
+        if (res.error) { console.error(res.error); return; }
+        db.chats = (res.data || []).map(rowToChat);
+      });
+    }
+    function loadMessagesForChat(chatId){
+      if (!sb) return Promise.resolve();
+      return sb.from("chat_messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true }).then(function(res){
+        if (res.error) { console.error(res.error); return; }
+        var c = db.chats.find(function(x){ return x.id === chatId; });
+        if (!c) return;
+        c.messages = (res.data || []).map(function(m){
+          return { side: m.sender_display_name === db.current ? "right" : "left", text: m.body, read: !!m.read, ts: new Date(m.created_at).getTime() };
+        });
+        c._messagesLoaded = true;
+      });
+    }
+    function persistPostMeta(p){
+      if (!sb) return api.save();
+      return sb.from("posts").update({ meta: metaFromPost(p) }).eq("id", p.id).then(function(res){
+        if (res.error) alert(res.error.message);
+        return fetchPostsFromSb();
+      });
+    }
+    function refreshAllFromSb(){
+      if (!sb) return Promise.resolve();
+      return fetchPostsFromSb().then(fetchChatsFromSb);
+    }
+    async function ensureProfile(username){
+      if (!sb) return;
+      var u = await sb.auth.getUser();
+      var uid = u.data.user && u.data.user.id;
+      if (!uid) return;
+      var res = await sb.from("profiles").upsert({ id: uid, username: username }, { onConflict: "id" });
+      if (res.error) console.error(res.error);
+    }
+    async function hydrateUserFromSession(session){
+      if (!sb || !session || !session.user) { db.current = null; return; }
+      var r = await sb.from("profiles").select("username").eq("id", session.user.id).maybeSingle();
+      if (r.data && r.data.username) {
+        db.current = r.data.username;
+      } else {
+        var localPart = (session.user.email || "").split("@")[0];
+        db.current = localPart || null;
+        if (db.current) await ensureProfile(db.current);
+      }
+    }
 
     function fmt(t){return new Date(t).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"});}
     function id(p){return p+"_"+Math.random().toString(36).slice(2,8);}
@@ -326,7 +451,18 @@
       document.querySelectorAll(".tochat").forEach(function(b){ b.addEventListener("click", function(){ if(!mustLogin()) return; openOrCreateChat(b.dataset.name,b.dataset.project); setPage("chat"); });});
       document.querySelectorAll(".viewpost").forEach(function(b){ b.addEventListener("click", function(){ openPostDetail(b.dataset.id); });});
       document.querySelectorAll(".edit").forEach(function(b){ b.addEventListener("click", function(){ var p=db.posts.find(function(x){return x.id===b.dataset.id;}); if(!p) return; var modalId = p.postType === "demand" ? "demandModal" : "ideaModal"; document.getElementById((p.postType === "demand" ? "demandTitle" : "ideaTitle")).value = p.title; document.getElementById((p.postType === "demand" ? "demandCategory" : "ideaCategory")).value = p.category; document.getElementById((p.postType === "demand" ? "demandDesc" : "ideaDesc")).value = p.desc; openModal(modalId); db.editId = p.id; });});
-      document.querySelectorAll(".del").forEach(function(b){ b.addEventListener("click", function(){ if(!confirm("确认删除?")) return; db.posts = db.posts.filter(function(x){return x.id!==b.dataset.id;}); api.save().then(renderPosts); });});
+      document.querySelectorAll(".del").forEach(function(b){ b.addEventListener("click", function(){
+        if(!confirm("确认删除?")) return;
+        if (sb) {
+          sb.from("posts").delete().eq("id", b.dataset.id).then(function(res){
+            if (res.error) alert(res.error.message);
+            return fetchPostsFromSb().then(renderPosts);
+          });
+          return;
+        }
+        db.posts = db.posts.filter(function(x){return x.id!==b.dataset.id;});
+        api.save().then(renderPosts);
+      });});
       renderHall();
     }
 
@@ -429,21 +565,21 @@
       if (allowAll) {
         allowAll.addEventListener("change", function(){
           p.allowDownloadAll = allowAll.checked;
-          api.save().then(renderPostDetail);
+          persistPostMeta(p).then(function(){ renderPostDetail(); });
         });
       }
       document.querySelectorAll(".approveUser").forEach(function(b){
         b.addEventListener("click", function(){
           var u = b.dataset.user;
           if (p.approvedUsers.indexOf(u) === -1) p.approvedUsers.push(u);
-          api.save().then(renderPostDetail);
+          persistPostMeta(p).then(function(){ renderPostDetail(); });
         });
       });
       document.querySelectorAll(".requestDownload").forEach(function(b){
         b.addEventListener("click", function(){
           if(!mustLogin()) return;
           if (p.downloadRequests.indexOf(db.current) === -1) p.downloadRequests.push(db.current);
-          api.save().then(function(){ alert("已向发布者发送下载申请"); renderPostDetail(); });
+          persistPostMeta(p).then(function(){ alert("已向发布者发送下载申请"); renderPostDetail(); });
         });
       });
       document.querySelectorAll(".signNda").forEach(function(b){
@@ -452,7 +588,7 @@
           if (!confirm("请确认签署 NDA 保密协议，签署后可查看核心加密内容。")) return;
           if (p.ndaSignedUsers.indexOf(db.current) === -1) p.ndaSignedUsers.push(db.current);
           p.ndaSignLogs.push({ user: db.current, ts: Date.now() });
-          api.save().then(renderPostDetail);
+          persistPostMeta(p).then(function(){ renderPostDetail(); });
         });
       });
     }
@@ -462,13 +598,32 @@
       var q = document.getElementById("chatSearch").value.trim().toLowerCase();
       var list = db.chats.filter(function(c){ return !q || c.name.toLowerCase().includes(q) || c.project.toLowerCase().includes(q); });
       document.getElementById("chatList").innerHTML = list.map(row).join("") || '<p class="text-sm text-slate-500">无匹配</p>';
-      document.querySelectorAll(".crow").forEach(function(b){ b.addEventListener("click", function(){ activeChatId=b.dataset.id; var c=db.chats.find(function(x){return x.id===activeChatId;}); if(c) c.unread=0; api.save().then(function(){renderChats();renderActive();}); });});
+      document.querySelectorAll(".crow").forEach(function(b){
+        b.addEventListener("click", function(){
+          activeChatId = b.dataset.id;
+          var c = db.chats.find(function(x){ return x.id === activeChatId; });
+          if (sb) {
+            sb.from("chats").update({ unread_count: 0 }).eq("id", activeChatId).then(function(res){
+              if (res.error) console.error(res.error);
+              if (c) c.unread = 0;
+              loadMessagesForChat(activeChatId).then(function(){ renderChats(); renderActive(); });
+            });
+            return;
+          }
+          if (c) c.unread = 0;
+          api.save().then(function(){ renderChats(); renderActive(); });
+        });
+      });
     }
     function renderActive(){
       var c = db.chats.find(function(x){return x.id===activeChatId;});
       document.getElementById("empty").classList.toggle("hidden", !!c);
       document.getElementById("panel").classList.toggle("hidden", !c);
       if(!c) return;
+      if (sb && !c._messagesLoaded) {
+        loadMessagesForChat(activeChatId).then(function(){ renderActive(); });
+        return;
+      }
       document.getElementById("chatName").textContent=c.name;
       document.getElementById("chatMeta").textContent="项目: "+c.project+" · "+(c.online?"在线":"离线");
       document.getElementById("chatRole").textContent = c.role || inferRole(c.name);
@@ -478,6 +633,37 @@
       var box=document.getElementById("msgs"); box.scrollTop=box.scrollHeight;
     }
     function openOrCreateChat(name,project){
+      if (sb) {
+        (async function(){
+          var ex = await sb.from("chats").select("*").eq("peer_display_name", name).eq("project_title", project).maybeSingle();
+          if (ex.error) { alert(ex.error.message); return; }
+          if (ex.data) {
+            activeChatId = ex.data.id;
+          } else {
+            var ins = await sb.from("chats").insert({
+              peer_display_name: name,
+              project_title: project,
+              role: inferRole(name),
+              online: Math.random() > 0.35,
+              unread_count: 0
+            }).select("*").single();
+            if (ins.error) { alert(ins.error.message); return; }
+            activeChatId = ins.data.id;
+            var wel = await sb.from("chat_messages").insert({
+              chat_id: activeChatId,
+              sender_display_name: name,
+              body: "您好，已收到沟通申请。",
+              read: true
+            });
+            if (wel.error) { alert(wel.error.message); return; }
+          }
+          await fetchChatsFromSb();
+          await loadMessagesForChat(activeChatId);
+          renderChats();
+          renderActive();
+        })();
+        return;
+      }
       var c=db.chats.find(function(x){return x.name===name&&x.project===project;});
       if(!c){ c={id:id("c"),name:name,role:inferRole(name),project:project,online:Math.random()>0.35,unread:0,messages:[{side:"left",text:"您好，已收到沟通申请。",read:true,ts:Date.now()}]}; db.chats.push(c); api.save(); }
       activeChatId=c.id; renderChats(); renderActive();
@@ -486,6 +672,29 @@
       if(!mustLogin() || !activeChatId) return;
       var c=db.chats.find(function(x){return x.id===activeChatId;}); if(!c) return;
       var t=document.getElementById("msgInput").value.trim(); if(!t && !pendingFile) return;
+      if (sb) {
+        (async function(){
+          if (t) {
+            var r1 = await sb.from("chat_messages").insert({ chat_id: activeChatId, sender_display_name: db.current, body: t, read: false });
+            if (r1.error) { alert(r1.error.message); return; }
+          }
+          if (pendingFile) {
+            var r2 = await sb.from("chat_messages").insert({ chat_id: activeChatId, sender_display_name: db.current, body: "[附件] "+pendingFile, read: false });
+            if (r2.error) { alert(r2.error.message); return; }
+          }
+          var r3 = await sb.from("chat_messages").insert({ chat_id: activeChatId, sender_display_name: "系统", body: "收到，稍后回复。", read: true });
+          if (r3.error) { alert(r3.error.message); return; }
+          document.getElementById("msgInput").value="";
+          document.getElementById("file").value="";
+          document.getElementById("fileName").textContent="";
+          pendingFile="";
+          c._messagesLoaded = false;
+          await loadMessagesForChat(activeChatId);
+          renderChats();
+          renderActive();
+        })();
+        return;
+      }
       if(t) c.messages.push({side:"right",text:t,read:false,ts:Date.now()});
       if(pendingFile) c.messages.push({side:"right",text:"[附件] "+pendingFile,read:false,ts:Date.now()});
       c.messages.push({side:"left",text:"收到，稍后回复。",read:true,ts:Date.now()});
@@ -512,18 +721,6 @@
       m.classList.remove("flex","modal-fade");
       db.editId = "";
     }
-    function savePost(postType, title, category, desc, attachments){
-      if(!mustLogin()) return;
-      if(!title||!category||!desc) return alert("请完整填写");
-      if(db.editId){
-        var p=db.posts.find(function(x){return x.id===db.editId;});
-        if(p){ p.title=title; p.category=category; p.desc=desc; p.postType=postType; p.attachments = attachments && attachments.length ? attachments : (p.attachments || []); }
-      } else {
-        var newId = id("p");
-        recentPostId = newId;
-        db.posts.push({id:newId,author:db.current,title:title,category:category,desc:desc,ts:Date.now(),postType:postType,badge:postType==="demand"?"待审核":"刚刚发布",attachments:attachments || [],allowDownloadAll:false,downloadRequests:[],approvedUsers:[]});
-      }
-      db.editId = "";
     function filesToData(files){
       return Promise.all(Array.from(files || []).map(function(file){
         return new Promise(function(resolve){
@@ -533,11 +730,60 @@
         });
       }));
     }
+
+    function savePost(postType, title, category, desc, attachments){
+      if(!mustLogin()) return;
+      if(!title||!category||!desc) return alert("请完整填写");
+      if (sb) {
+        (async function(){
+          var u = await sb.auth.getUser();
+          var uid = u.data.user && u.data.user.id;
+          if (!uid) { alert("请先登录"); return; }
+          if(db.editId){
+            var p=db.posts.find(function(x){return x.id===db.editId;});
+            if(!p) return;
+            var nextAtt = attachments && attachments.length ? attachments : (p.attachments || []);
+            var res = await sb.from("posts").update({
+              title: title,
+              category: category,
+              description: desc,
+              post_type: postType,
+              meta: Object.assign({}, metaFromPost(p), { attachments: nextAtt })
+            }).eq("id", db.editId);
+            if (res.error) { alert(res.error.message); return; }
+          } else {
+            var ins = await sb.from("posts").insert({
+              author_id: uid,
+              author_name: db.current,
+              title: title,
+              category: category,
+              description: desc,
+              post_type: postType,
+              badge: postType==="demand" ? "待审核" : "刚刚发布",
+              meta: Object.assign(defaultMeta(), { attachments: attachments || [] })
+            }).select("id").single();
+            if (ins.error) { alert(ins.error.message); return; }
+            recentPostId = ins.data.id;
+          }
+          db.editId = "";
+          await fetchPostsFromSb();
+          renderPosts();
+          if (recentPostId) setTimeout(function(){ recentPostId = ""; renderPosts(); }, 1200);
+        })();
+        return;
+      }
+      if(db.editId){
+        var p=db.posts.find(function(x){return x.id===db.editId;});
+        if(p){ p.title=title; p.category=category; p.desc=desc; p.postType=postType; p.attachments = attachments && attachments.length ? attachments : (p.attachments || []); }
+      } else {
+        var newId = id("p");
+        recentPostId = newId;
+        db.posts.push({id:newId,author:db.current,title:title,category:category,desc:desc,ts:Date.now(),postType:postType,badge:postType==="demand"?"待审核":"刚刚发布",attachments:attachments || [],allowDownloadAll:false,downloadRequests:[],approvedUsers:[],ndaSignedUsers:[],ndaSignLogs:[]});
+      }
+      db.editId = "";
       api.save().then(function(){
         renderPosts();
-        if (recentPostId) {
-          setTimeout(function(){ recentPostId = ""; renderPosts(); }, 1200);
-        }
+        if (recentPostId) setTimeout(function(){ recentPostId = ""; renderPosts(); }, 1200);
       });
     }
 
@@ -549,12 +795,58 @@
       e.preventDefault();
       var u=document.getElementById("u").value.trim(), p=document.getElementById("p").value.trim();
       if(!u||!p) return alert("请输入用户名和密码");
+      var email = syntheticEmail(u);
+      if (sb) {
+        (async function(){
+          if(authMode==="register"){
+            var reg = await sb.auth.signUp({ email: email, password: p, options: { data: { username: u } } });
+            if (reg.error) { alert(reg.error.message); return; }
+            if (reg.data.session) {
+              await ensureProfile(u);
+              await hydrateUserFromSession(reg.data.session);
+            } else {
+              alert("注册成功。若项目开启了邮箱验证，请查收邮件后再登录。");
+              closeAuth();
+              return;
+            }
+          } else {
+            var lg = await sb.auth.signInWithPassword({ email: email, password: p });
+            if (lg.error) { alert(lg.error.message); return; }
+            await ensureProfile(u);
+            await hydrateUserFromSession(lg.data.session);
+          }
+          closeAuth();
+          authState();
+          await refreshAllFromSb();
+          renderPosts();
+          renderHall();
+          renderChats();
+          renderActive();
+        })();
+        return;
+      }
       var found=db.users.find(function(x){return x.u===u;});
       if(authMode==="register"){ if(found) return alert("用户名已存在"); db.users.push({u:u,p:p}); db.current=u; }
       else { if(!found||found.p!==p) return alert("用户名或密码错误"); db.current=u; }
       api.save().then(function(){closeAuth();authState();renderPosts();});
     });
-    document.getElementById("logout").addEventListener("click",function(){ db.current=null; api.save().then(function(){authState();renderPosts();}); });
+    document.getElementById("logout").addEventListener("click",function(){
+      if (sb) {
+        sb.auth.signOut().then(function(){
+          db.current = null;
+          authState();
+          refreshAllFromSb().then(function(){
+            renderPosts();
+            renderHall();
+            renderChats();
+            renderActive();
+          });
+        });
+        return;
+      }
+      db.current=null;
+      api.save().then(function(){authState();renderPosts();});
+    });
     document.getElementById("openIdeaModal").addEventListener("click",function(){ if(!mustLogin()) return; openModal("ideaModal"); });
     document.getElementById("openDemandModal").addEventListener("click",function(){ if(!mustLogin()) return; openModal("demandModal"); });
     document.querySelectorAll(".closePublishModal").forEach(function(b){ b.addEventListener("click", function(){ closeModal(b.dataset.modal); });});
@@ -610,7 +902,51 @@
       });
     });
 
-    authState(); renderPosts(); renderHall(); renderChats(); renderActive();
+    function initApp(){
+      if (sb) {
+        sb.auth.getSession().then(function(res){
+          var session = res.data.session;
+          if (session) {
+            hydrateUserFromSession(session).then(function(){
+              authState();
+              refreshAllFromSb().then(function(){
+                renderPosts();
+                renderHall();
+                renderChats();
+                renderActive();
+              });
+            });
+          } else {
+            db.current = null;
+            authState();
+            refreshAllFromSb().then(function(){
+              renderPosts();
+              renderHall();
+              renderChats();
+              renderActive();
+            });
+          }
+        });
+        sb.auth.onAuthStateChange(function(_event, session){
+          hydrateUserFromSession(session).then(function(){
+            authState();
+            refreshAllFromSb().then(function(){
+              renderPosts();
+              renderHall();
+              renderChats();
+              renderActive();
+            });
+          });
+        });
+      } else {
+        authState();
+        renderPosts();
+        renderHall();
+        renderChats();
+        renderActive();
+      }
+    }
+    initApp();
   </script>
 </body>
 </html>
