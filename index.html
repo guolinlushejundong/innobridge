@@ -4,6 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>InnoLink</title>
+  <meta name="description" content="InnoLink 创新成果撮合平台，支持发布创意与需求、地区检索、在线沟通、NDA 解锁与审核流转。" />
+  <meta name="keywords" content="创新,需求,成果转化,技术对接,NDA,产学研,InnoLink" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="InnoLink 创新成果撮合平台" />
+  <meta property="og:description" content="发布创意与需求，按地区和条件检索，在线沟通并推进合作。" />
+  <meta property="og:url" content="https://innobridge-weld.vercel.app/" />
+  <meta property="og:image" content="https://innobridge-weld.vercel.app/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="InnoLink 创新成果撮合平台" />
+  <meta name="twitter:description" content="发布创意与需求，按地区和条件检索，在线沟通并推进合作。" />
+  <meta name="twitter:image" content="https://innobridge-weld.vercel.app/og-image.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     /* Contrast fix for legacy dark blocks still in page */
@@ -101,6 +112,7 @@
         <button class="tab rounded px-2 py-1 bg-blue-600 text-white" data-page="home">首页</button>
         <button class="tab rounded px-2 py-1 border" data-page="hall">大厅</button>
         <button class="tab rounded px-2 py-1 border" data-page="publish">发布</button>
+        <button class="tab rounded px-2 py-1 border" data-page="admin">审核</button>
         <button class="tab rounded px-2 py-1 border" data-page="chat">沟通</button>
       </nav>
       <div class="flex items-center gap-2">
@@ -198,6 +210,28 @@
         </div>
       </div>
       <div id="hallList" class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3"></div>
+    </section>
+
+    <section id="admin" class="page hidden">
+      <div class="rounded-xl border bg-white p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-lg font-semibold">发布审核后台</h3>
+            <p class="text-sm text-slate-500">管理员可对帖子执行审核通过或驳回，驳回可填写原因。</p>
+          </div>
+          <p id="adminHint" class="text-xs text-slate-500"></p>
+        </div>
+      </div>
+      <div class="mt-4 grid gap-4 lg:grid-cols-2">
+        <div class="rounded-xl border bg-white p-4">
+          <h4 class="mb-3 font-semibold">待审核</h4>
+          <div id="adminPendingList" class="space-y-2"></div>
+        </div>
+        <div class="rounded-xl border bg-white p-4">
+          <h4 class="mb-3 font-semibold">已审核记录</h4>
+          <div id="adminReviewedList" class="space-y-2"></div>
+        </div>
+      </div>
     </section>
 
     <section id="chat" class="page hidden">
@@ -325,6 +359,7 @@
   <script>
     var SUPABASE_URL = "YOUR_SUPABASE_URL";
     var SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+    var SUPABASE_STORAGE_BUCKET = "post-files";
 
     var KEY = "innolink_v3";
     var db = JSON.parse(localStorage.getItem(KEY) || "{}");
@@ -344,6 +379,7 @@
       }
     } catch (e) { sb = null; }
 
+    var ADMIN_USERS = ["admin", "平台管理员", "管理员"];
     var authMode = "login", activeChatId = "", pendingFile = "", recentPostId = "", activePostId = "";
     var pendingIdeaAttachments = [], pendingDemandAttachments = [];
     var api = {
@@ -373,6 +409,10 @@
         ndaSignLogs: m.nda_sign_logs || [],
         regionProvince: m.region_province || "",
         regionCity: m.region_city || "",
+        reviewStatus: m.review_status || (r.badge === "待审核" ? "pending" : "approved"),
+        reviewReason: m.review_reason || "",
+        reviewBy: m.review_by || "",
+        reviewAt: m.review_at || "",
         author_id: r.author_id
       };
     }
@@ -385,7 +425,11 @@
         nda_signed_users: p.ndaSignedUsers || [],
         nda_sign_logs: p.ndaSignLogs || [],
         region_province: p.regionProvince || "",
-        region_city: p.regionCity || ""
+        region_city: p.regionCity || "",
+        review_status: p.reviewStatus || "pending",
+        review_reason: p.reviewReason || "",
+        review_by: p.reviewBy || "",
+        review_at: p.reviewAt || ""
       };
     }
     function rowToChat(r){
@@ -468,6 +512,12 @@
       if ((name || "").includes("专利")) return "专利持有者";
       if ((name || "").includes("顾问")) return "企业创新主管";
       return "企业创新主管";
+    }
+    function isAdmin(){ return !!db.current && ADMIN_USERS.indexOf(db.current) > -1; }
+    function reviewBadge(status){
+      if (status === "approved") return '<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">已通过</span>';
+      if (status === "rejected") return '<span class="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] text-rose-700">已驳回</span>';
+      return '<span class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">待审核</span>';
     }
 
     function badgeHtml(type, text){
@@ -580,7 +630,8 @@
       var actions = mine ? '<div class="mt-2 flex gap-1"><button class="edit border rounded px-2 py-1 text-xs" data-id="'+p.id+'">编辑</button><button class="del border rounded px-2 py-1 text-xs text-rose-700 border-rose-200 bg-rose-50" data-id="'+p.id+'">删除</button><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div>' : '<div class="mt-2 flex gap-1"><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div>';
       var pop = p.id === recentPostId ? " post-pop" : "";
       var region = p.regionProvince ? ('<span class="rounded bg-fuchsia-50 px-2 py-1 text-fuchsia-700">📍 '+p.regionProvince+(p.regionCity?(' · '+p.regionCity):'')+'</span>') : '';
-      return '<div class="rounded border p-3'+pop+'" data-post-id="'+p.id+'"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+badgeHtml(p.postType, p.badge)+region+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="text-sm text-slate-600">'+p.desc+'</p><p class="mt-1 text-xs text-slate-500">发布者: '+p.author+'</p>'+actions+'</div>';
+      var status = p.reviewStatus || (p.badge === "待审核" ? "pending" : "approved");
+      return '<div class="rounded border p-3'+pop+'" data-post-id="'+p.id+'"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+reviewBadge(status)+region+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="text-sm text-slate-600">'+p.desc+'</p><p class="mt-1 text-xs text-slate-500">发布者: '+p.author+'</p>'+actions+'</div>';
     }
 
     function renderPosts(){
@@ -624,11 +675,13 @@
         api.save().then(renderPosts);
       });});
       renderHall();
+      renderAdmin();
     }
 
     function hallCard(p){
       var region = p.regionProvince ? ('<span class="rounded bg-fuchsia-50 px-2 py-1 text-fuchsia-700">📍 '+p.regionProvince+(p.regionCity?(" · "+p.regionCity):"")+'</span>') : '<span class="rounded bg-slate-100 px-2 py-1 text-slate-500">未填写地区</span>';
-      return '<article class="rounded-xl border bg-white p-3"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+badgeHtml(p.postType, p.badge)+region+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleDateString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="mt-1 line-clamp-2 text-sm text-slate-600">'+p.desc+'</p><div class="mt-2 flex items-center justify-between"><span class="text-xs text-slate-500">'+p.author+'</span><div class="flex gap-1"><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">立即沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div></div></article>';
+      var status = p.reviewStatus || (p.badge === "待审核" ? "pending" : "approved");
+      return '<article class="rounded-xl border bg-white p-3"><div class="flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+reviewBadge(status)+region+'</div><span class="text-slate-500">'+new Date(p.ts).toLocaleDateString()+'</span></div><h4 class="mt-2 font-semibold">'+p.title+'</h4><p class="mt-1 line-clamp-2 text-sm text-slate-600">'+p.desc+'</p><div class="mt-2 flex items-center justify-between"><span class="text-xs text-slate-500">'+p.author+'</span><div class="flex gap-1"><button class="tochat border rounded px-2 py-1 text-xs" data-name="'+p.author+'" data-project="'+p.title+'">立即沟通</button><button class="viewpost border rounded px-2 py-1 text-xs" data-id="'+p.id+'">查看帖子</button></div></div></article>';
     }
 
     function renderHall(){
@@ -651,6 +704,51 @@
       });
       document.querySelectorAll("#hallList .viewpost").forEach(function(b){
         b.addEventListener("click", function(){ openPostDetail(b.dataset.id); });
+      });
+    }
+    function adminCard(p, pending){
+      var reviewed = p.reviewAt ? ('<p class="mt-1 text-[11px] text-slate-500">审核人: '+(p.reviewBy||"-")+' · 时间: '+new Date(p.reviewAt).toLocaleString()+'</p>') : "";
+      var reason = p.reviewReason ? ('<p class="mt-1 text-[11px] text-rose-600">驳回原因: '+p.reviewReason+'</p>') : "";
+      var actions = pending ? '<div class="mt-2 flex gap-2"><button class="adminApprove rounded border px-2 py-1 text-xs text-emerald-700" data-id="'+p.id+'">审核通过</button><button class="adminReject rounded border px-2 py-1 text-xs text-rose-700" data-id="'+p.id+'">驳回</button></div>' : "";
+      return '<div class="rounded border p-3"><div class="flex items-center justify-between text-xs"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">'+p.category+'</span>'+reviewBadge(p.reviewStatus || "pending")+'</div><h5 class="mt-2 font-medium">'+p.title+'</h5><p class="text-xs text-slate-500">发布者: '+p.author+'</p>'+reviewed+reason+actions+'</div>';
+    }
+    function updateReview(postId, status, reason){
+      var p = db.posts.find(function(x){ return x.id === postId; });
+      if (!p) return;
+      p.reviewStatus = status;
+      p.reviewReason = reason || "";
+      p.reviewBy = db.current || "";
+      p.reviewAt = Date.now();
+      p.badge = status === "approved" ? "已通过" : (status === "rejected" ? "已驳回" : "待审核");
+      persistPostMeta(p).then(function(){
+        renderPosts();
+        renderAdmin();
+      });
+    }
+    function renderAdmin(){
+      var hint = document.getElementById("adminHint");
+      if (!isAdmin()) {
+        hint.textContent = "仅管理员可执行审核操作（建议使用 admin 账号登录）";
+        document.getElementById("adminPendingList").innerHTML = '<p class="text-sm text-slate-500">你当前不是管理员账号。</p>';
+        document.getElementById("adminReviewedList").innerHTML = '<p class="text-sm text-slate-500">暂无可查看审核记录。</p>';
+        return;
+      }
+      hint.textContent = "当前管理员: " + db.current;
+      var all = db.posts.slice().sort(function(a,b){ return b.ts - a.ts; });
+      var pending = all.filter(function(p){ return (p.reviewStatus || "pending") === "pending"; });
+      var reviewed = all.filter(function(p){ return (p.reviewStatus || "pending") !== "pending"; });
+      document.getElementById("adminPendingList").innerHTML = pending.map(function(p){ return adminCard(p, true); }).join("") || '<p class="text-sm text-slate-500">暂无待审核内容。</p>';
+      document.getElementById("adminReviewedList").innerHTML = reviewed.map(function(p){ return adminCard(p, false); }).join("") || '<p class="text-sm text-slate-500">暂无审核记录。</p>';
+      document.querySelectorAll(".adminApprove").forEach(function(b){
+        b.addEventListener("click", function(){ updateReview(b.dataset.id, "approved", ""); });
+      });
+      document.querySelectorAll(".adminReject").forEach(function(b){
+        b.addEventListener("click", function(){
+          var reason = prompt("请输入驳回原因（将记录到审核日志）");
+          if (reason === null) return;
+          if (!reason.trim()) { alert("请填写驳回原因"); return; }
+          updateReview(b.dataset.id, "rejected", reason.trim());
+        });
       });
     }
 
@@ -687,13 +785,14 @@
         var right = isPdf
           ? '<span class="text-xs text-slate-400">请在下方 PDF 下载区操作</span>'
           : (canDownload && ndaUnlocked
-            ? '<a download="'+f.name+'" href="'+f.dataUrl+'" class="rounded border px-2 py-1 text-xs text-blue-600">下载</a>'
+            ? '<button class="downloadAttachment rounded border px-2 py-1 text-xs text-blue-600" data-index="'+idx+'">下载</button>'
             : '<button class="requestDownload rounded border px-2 py-1 text-xs text-amber-700" data-index="'+idx+'">申请下载</button>');
         return '<div class="flex items-center justify-between rounded border p-2">'+left+right+'</div>';
       }).join("") : '<p class="text-sm text-slate-500">该帖子暂无附件</p>';
       var pdfFiles = p.attachments.filter(function(f){ return (f.name || "").toLowerCase().endsWith(".pdf") || (f.type || "").toLowerCase().indexOf("pdf") > -1; });
       var pdfHtml = pdfFiles.length ? pdfFiles.map(function(f){
-        return '<div class="flex items-center justify-between rounded border p-2"><p class="text-sm">'+f.name+'</p>'+(canDownload && ndaUnlocked?'<a download="'+f.name+'" href="'+f.dataUrl+'" class="rounded border px-2 py-1 text-xs text-blue-600">下载PDF</a>':'<span class="text-xs text-slate-400">待授权或待签署 NDA</span>')+'</div>';
+        var idx = p.attachments.indexOf(f);
+        return '<div class="flex items-center justify-between rounded border p-2"><p class="text-sm">'+f.name+'</p>'+(canDownload && ndaUnlocked?'<button class="downloadAttachment rounded border px-2 py-1 text-xs text-blue-600" data-index="'+idx+'">下载PDF</button>':'<span class="text-xs text-slate-400">待授权或待签署 NDA</span>')+'</div>';
       }).join("") : '<p class="text-sm text-slate-500">暂无 PDF 附件</p>';
       var ndaClass = ndaUnlocked ? "nda-unlocked" : "nda-locked";
       var ndaOverlay = '<div class="nda-overlay"><button class="signNda rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">签署 NDA 解锁</button></div>';
@@ -741,6 +840,12 @@
           if(!mustLogin()) return;
           if (p.downloadRequests.indexOf(db.current) === -1) p.downloadRequests.push(db.current);
           persistPostMeta(p).then(function(){ alert("已向发布者发送下载申请"); renderPostDetail(); });
+        });
+      });
+      document.querySelectorAll(".downloadAttachment").forEach(function(b){
+        b.addEventListener("click", function(){
+          var idx = Number(b.dataset.index);
+          downloadAttachment(p.attachments[idx]);
         });
       });
       document.querySelectorAll(".signNda").forEach(function(b){
@@ -891,6 +996,59 @@
         });
       }));
     }
+    function safeFileName(name){
+      return (name || "file").replace(/[^\w.\-\u4e00-\u9fa5]/g, "_");
+    }
+    function uploadFilesToStorage(files){
+      if (!sb) return Promise.resolve([]);
+      var list = Array.from(files || []);
+      if (!list.length) return Promise.resolve([]);
+      return Promise.all(list.map(async function(file){
+        var path = (db.current || "anon") + "/" + Date.now() + "_" + Math.random().toString(36).slice(2, 8) + "_" + safeFileName(file.name);
+        var up = await sb.storage.from(SUPABASE_STORAGE_BUCKET).upload(path, file, { upsert: false });
+        if (up.error) throw up.error;
+        return { name: file.name, type: file.type, size: file.size, storagePath: path };
+      }));
+    }
+    function prepareAttachmentsForSubmit(fileInputId, pendingCache){
+      var input = document.getElementById(fileInputId);
+      if (sb) {
+        return uploadFilesToStorage(input.files).then(function(uploaded){
+          return uploaded.length ? uploaded : (pendingCache || []);
+        });
+      }
+      return filesToData(input.files).then(function(list){
+        return list.length ? list : (pendingCache || []);
+      });
+    }
+    function downloadAttachment(att){
+      if (!att) return;
+      if (att.dataUrl) {
+        var a = document.createElement("a");
+        a.href = att.dataUrl;
+        a.download = att.name || "download";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+      if (!sb || !att.storagePath) {
+        alert("当前附件不可下载");
+        return;
+      }
+      sb.storage.from(SUPABASE_STORAGE_BUCKET).createSignedUrl(att.storagePath, 120).then(function(res){
+        if (res.error || !res.data || !res.data.signedUrl) {
+          alert("下载链接生成失败，请检查 Storage bucket 与权限");
+          return;
+        }
+        var a = document.createElement("a");
+        a.href = res.data.signedUrl;
+        a.download = att.name || "download";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+    }
 
     function savePost(postType, title, category, desc, attachments, province, city){
       if(!mustLogin()) return Promise.resolve(false);
@@ -909,7 +1067,8 @@
               category: category,
               description: desc,
               post_type: postType,
-              meta: Object.assign({}, metaFromPost(p), { attachments: nextAtt, region_province: province, region_city: city })
+              meta: Object.assign({}, metaFromPost(p), { attachments: nextAtt, region_province: province, region_city: city, review_status: "pending", review_reason: "", review_by: "", review_at: "" }),
+              badge: "待审核"
             }).eq("id", db.editId);
             if (res.error) { alert("发布失败: " + res.error.message); return false; }
           } else {
@@ -920,8 +1079,8 @@
               category: category,
               description: desc,
               post_type: postType,
-              badge: postType==="demand" ? "待审核" : "刚刚发布",
-              meta: Object.assign(defaultMeta(), { attachments: attachments || [], region_province: province, region_city: city })
+              badge: "待审核",
+              meta: Object.assign(defaultMeta(), { attachments: attachments || [], region_province: province, region_city: city, review_status: "pending", review_reason: "", review_by: "", review_at: "" })
             }).select("id").single();
             if (ins.error) { alert("发布失败: " + ins.error.message); return false; }
             recentPostId = ins.data.id;
@@ -935,11 +1094,11 @@
       }
       if(db.editId){
         var p=db.posts.find(function(x){return x.id===db.editId;});
-        if(p){ p.title=title; p.category=category; p.desc=desc; p.postType=postType; p.regionProvince=province; p.regionCity=city; p.attachments = attachments && attachments.length ? attachments : (p.attachments || []); }
+        if(p){ p.title=title; p.category=category; p.desc=desc; p.postType=postType; p.regionProvince=province; p.regionCity=city; p.reviewStatus="pending"; p.reviewReason=""; p.reviewBy=""; p.reviewAt=""; p.badge="待审核"; p.attachments = attachments && attachments.length ? attachments : (p.attachments || []); }
       } else {
         var newId = id("p");
         recentPostId = newId;
-        db.posts.push({id:newId,author:db.current,title:title,category:category,desc:desc,ts:Date.now(),postType:postType,badge:postType==="demand"?"待审核":"刚刚发布",regionProvince:province,regionCity:city,attachments:attachments || [],allowDownloadAll:false,downloadRequests:[],approvedUsers:[],ndaSignedUsers:[],ndaSignLogs:[]});
+        db.posts.push({id:newId,author:db.current,title:title,category:category,desc:desc,ts:Date.now(),postType:postType,badge:"待审核",reviewStatus:"pending",reviewReason:"",reviewBy:"",reviewAt:"",regionProvince:province,regionCity:city,attachments:attachments || [],allowDownloadAll:false,downloadRequests:[],approvedUsers:[],ndaSignedUsers:[],ndaSignLogs:[]});
       }
       db.editId = "";
       return api.save().then(function(){
@@ -990,7 +1149,7 @@
       var found=db.users.find(function(x){return x.u===u;});
       if(authMode==="register"){ if(found) return alert("用户名已存在"); db.users.push({u:u,p:p}); db.current=u; }
       else { if(!found||found.p!==p) return alert("用户名或密码错误"); db.current=u; }
-      api.save().then(function(){closeAuth();authState();renderPosts();});
+      api.save().then(function(){closeAuth();authState();renderPosts();renderHall();renderAdmin();});
     });
     document.getElementById("logout").addEventListener("click",function(){
       if (sb) {
@@ -1000,6 +1159,7 @@
           refreshAllFromSb().then(function(){
             renderPosts();
             renderHall();
+            renderAdmin();
             renderChats();
             renderActive();
           });
@@ -1007,15 +1167,14 @@
         return;
       }
       db.current=null;
-      api.save().then(function(){authState();renderPosts();});
+      api.save().then(function(){authState();renderPosts();renderHall();renderAdmin();});
     });
     document.getElementById("openIdeaModal").addEventListener("click",function(){ if(!mustLogin()) return; openModal("ideaModal"); });
     document.getElementById("openDemandModal").addEventListener("click",function(){ if(!mustLogin()) return; openModal("demandModal"); });
     document.querySelectorAll(".closePublishModal").forEach(function(b){ b.addEventListener("click", function(){ closeModal(b.dataset.modal); });});
     document.getElementById("ideaForm").addEventListener("submit",function(e){
       e.preventDefault();
-      filesToData(document.getElementById("ideaFiles").files).then(function(list){
-        var finalFiles = list.length ? list : pendingIdeaAttachments;
+      prepareAttachmentsForSubmit("ideaFiles", pendingIdeaAttachments).then(function(finalFiles){
         return savePost("idea", document.getElementById("ideaTitle").value.trim(), document.getElementById("ideaCategory").value, document.getElementById("ideaDesc").value.trim(), finalFiles, document.getElementById("ideaProvince").value, document.getElementById("ideaCity").value);
       }).then(function(ok){
         if (!ok) return;
@@ -1031,8 +1190,7 @@
     });
     document.getElementById("demandForm").addEventListener("submit",function(e){
       e.preventDefault();
-      filesToData(document.getElementById("demandFiles").files).then(function(list){
-        var finalFiles = list.length ? list : pendingDemandAttachments;
+      prepareAttachmentsForSubmit("demandFiles", pendingDemandAttachments).then(function(finalFiles){
         return savePost("demand", document.getElementById("demandTitle").value.trim(), document.getElementById("demandCategory").value, document.getElementById("demandDesc").value.trim(), finalFiles, document.getElementById("demandProvince").value, document.getElementById("demandCity").value);
       }).then(function(ok){
         if (!ok) return;
@@ -1134,16 +1292,28 @@
     document.getElementById("closeChatMobile").addEventListener("click", function(){ activeChatId = ""; renderActive(); });
     window.addEventListener("resize", function(){ if(activeChatId) renderActive(); });
     document.getElementById("ideaFiles").addEventListener("change", function(e){
-      filesToData(e.target.files).then(function(list){
-        pendingIdeaAttachments = list;
-        document.getElementById("ideaFilesPreview").textContent = list.length ? ("已选择: " + list.map(function(f){return f.name;}).join("、")) : "";
-      });
+      var files = Array.from(e.target.files || []);
+      if (sb) {
+        pendingIdeaAttachments = files.map(function(f){ return { name: f.name, type: f.type, size: f.size }; });
+        document.getElementById("ideaFilesPreview").textContent = files.length ? ("已选择: " + files.map(function(f){return f.name;}).join("、")) : "";
+      } else {
+        filesToData(e.target.files).then(function(list){
+          pendingIdeaAttachments = list;
+          document.getElementById("ideaFilesPreview").textContent = list.length ? ("已选择: " + list.map(function(f){return f.name;}).join("、")) : "";
+        });
+      }
     });
     document.getElementById("demandFiles").addEventListener("change", function(e){
-      filesToData(e.target.files).then(function(list){
-        pendingDemandAttachments = list;
-        document.getElementById("demandFilesPreview").textContent = list.length ? ("已选择: " + list.map(function(f){return f.name;}).join("、")) : "";
-      });
+      var files = Array.from(e.target.files || []);
+      if (sb) {
+        pendingDemandAttachments = files.map(function(f){ return { name: f.name, type: f.type, size: f.size }; });
+        document.getElementById("demandFilesPreview").textContent = files.length ? ("已选择: " + files.map(function(f){return f.name;}).join("、")) : "";
+      } else {
+        filesToData(e.target.files).then(function(list){
+          pendingDemandAttachments = list;
+          document.getElementById("demandFilesPreview").textContent = list.length ? ("已选择: " + list.map(function(f){return f.name;}).join("、")) : "";
+        });
+      }
     });
 
     var quickReplyTexts = ["我想进一步了解您的专利授权细节", "请问是否有样品展示？", "方便约个时间做线上沟通吗？"];
@@ -1167,6 +1337,7 @@
           if (oldHomeCity) document.getElementById("homeCity").value = oldHomeCity;
         }
         renderPosts();
+        renderAdmin();
       });
       if (sb) {
         sb.auth.getSession().then(function(res){
@@ -1177,6 +1348,7 @@
               refreshAllFromSb().then(function(){
                 renderPosts();
                 renderHall();
+                renderAdmin();
                 renderChats();
                 renderActive();
               });
@@ -1187,6 +1359,7 @@
             refreshAllFromSb().then(function(){
               renderPosts();
               renderHall();
+              renderAdmin();
               renderChats();
               renderActive();
             });
@@ -1198,6 +1371,7 @@
             refreshAllFromSb().then(function(){
               renderPosts();
               renderHall();
+              renderAdmin();
               renderChats();
               renderActive();
             });
@@ -1207,6 +1381,7 @@
         authState();
         renderPosts();
         renderHall();
+        renderAdmin();
         renderChats();
         renderActive();
       }
